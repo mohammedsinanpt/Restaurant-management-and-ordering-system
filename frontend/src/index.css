@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom 3D Preserves */
+.perspective-1000 {
+  perspective: 1000px;
+}
