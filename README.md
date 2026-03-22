@@ -10,18 +10,18 @@ A full-stack restaurant management and ordering platform built with **Django RES
 
 | Page | Screenshot |
 |------|------------|
-| 🏠 Landing Page | `screenshots/landing.png` |
-| 📋 Menu Page | `screenshots/menu.png` |
-| 🍛 Dish Details | `screenshots/dish-details.png` |
-| 🛒 Cart | `screenshots/cart.png` |
-| ✅ Order Confirmation | `screenshots/order-confirmation.png` |
-| 📡 Live Order Status | `screenshots/live-status.png` |
-| 🔐 Staff Portal | `screenshots/auth.png` |
-| 👤 Profile Page | `screenshots/profile.png` |
-| 🛠️ Admin Dashboard | `screenshots/admin-dashboard.png` |
-| 🍳 Kitchen View | `screenshots/kitchen-view.png` |
-| 📦 Order Management | `screenshots/order-management.png` |
-| 🗂️ Menu Management | `screenshots/menu-management.png` |
+| 🏠 Landing Page | <img width="1913" height="911" alt="landing" src="https://github.com/user-attachments/assets/44bcd5c8-54d1-417d-bd52-b1518933036e" /> |
+| 📋 Menu Page | <img width="1899" height="904" alt="menu" src="https://github.com/user-attachments/assets/2500f208-6020-4f4c-931b-b5e0390baec5" /> |
+| 🍛 Dish Details | <img width="1894" height="898" alt="dish-details" src="https://github.com/user-attachments/assets/0ec3cff3-a230-4c6f-bb83-882c165b79c5" /> |
+| 🛒 Cart | <img width="1907" height="901" alt="cart" src="https://github.com/user-attachments/assets/c6f77b04-af05-4c7e-a632-e27e8853a0b8" /> |
+| ✅ Order Confirmation | <img width="1918" height="907" alt="order-confirmation" src="https://github.com/user-attachments/assets/e1a89cb1-8cb7-4341-8cf5-1ce83667a21f" /> |
+| 📡 Live Order Status | <img width="962" height="887" alt="live-status" src="https://github.com/user-attachments/assets/46bb6eaf-b318-4cba-aeb2-c80f46c9c22a" /> |
+| 🔐 Staff Portal | <img width="1091" height="783" alt="auth" src="https://github.com/user-attachments/assets/d0730f91-41d3-4c77-8050-1a2e40aa1f34" /> |
+| 👤 Profile Page | <img width="889" height="892" alt="profile" src="https://github.com/user-attachments/assets/3cac7e25-7d57-4f10-9b17-fa61a284e4e4" /> |
+| 🛠️ Admin Dashboard | <img width="1880" height="901" alt="admin-dashboard" src="https://github.com/user-attachments/assets/b6edaba7-5110-4ec9-a590-714948c942d2" /> |
+| 🍳 Kitchen View | <img width="1897" height="872" alt="kitchen-view" src="https://github.com/user-attachments/assets/838048a0-5ac4-48cb-bae3-110de35feb2c" /> |
+| 📦 Order Management | <img width="1871" height="895" alt="order-management" src="https://github.com/user-attachments/assets/ac932a73-4cbe-4998-9686-82f70db5a39b" /> |
+| 🗂️ Menu Management |<img width="1882" height="897" alt="menu-management" src="https://github.com/user-attachments/assets/9531e59b-6f83-468a-9a27-5f21f7d9be99" /> |
 
 ---
 
