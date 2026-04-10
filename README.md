@@ -1,254 +1,201 @@
-# Restaurant Management System
+# 🍽️ Restaurant Ordering System
 
-A full-stack web application for managing restaurant operations, menu items, orders, and customer reviews. The system provides both customer-facing features for browsing the menu and placing orders, as well as an admin dashboard for managing menu items, tracking orders, and monitoring kitchen operations.
+A full-stack restaurant management and ordering platform built with **Django REST Framework** and **React + Vite**. Customers can browse the menu, place orders, and track them live — while admins manage everything from a dedicated dashboard.
 
-## Features
+---
 
-### Customer Features
-- **Menu Browsing**: Browse restaurant menu organized by categories with detailed information
-  - Dish descriptions, prices, and high-quality images
-  - Dietary information (vegetarian/non-vegetarian)
-  - Nutritional details (calories)
-  - Spiciness levels (Mild, Medium, Spicy)
-  - Ingredient lists
-- **Shopping Cart**: Add items to cart and manage quantities
-- **Order Placement**: Place orders as guest or authenticated user
-- **Order Tracking**: Real-time order status updates (Pending → Preparing → Ready)
-- **Order History**: Registered users can view their past orders
-- **Reviews & Ratings**: Submit and view ratings and reviews for menu items
-- **User Authentication**: Secure login and profile management
+## 📸 Screenshots
 
-### Admin Features
-- **Menu Management**: Add, edit, delete, and manage menu items
-- **Order Management**: View all orders and update their status
-- **Kitchen View**: Real-time view of orders being prepared
-- **Admin Dashboard**: Overview of orders, inventory, and system metrics
-- **Admin Authentication**: Secure admin login
+> _Add your screenshots here. Suggested shots below:_
 
-## Technology Stack
+| Page | Screenshot |
+|------|------------|
+| 🏠 Landing Page | <img width="1913" height="911" alt="landing" src="https://github.com/user-attachments/assets/44bcd5c8-54d1-417d-bd52-b1518933036e" /> |
+| 📋 Menu Page | <img width="1899" height="904" alt="menu" src="https://github.com/user-attachments/assets/2500f208-6020-4f4c-931b-b5e0390baec5" /> |
+| 🍛 Dish Details | <img width="1894" height="898" alt="dish-details" src="https://github.com/user-attachments/assets/0ec3cff3-a230-4c6f-bb83-882c165b79c5" /> |
+| 🛒 Cart | <img width="1907" height="901" alt="cart" src="https://github.com/user-attachments/assets/c6f77b04-af05-4c7e-a632-e27e8853a0b8" /> |
+| ✅ Order Confirmation | <img width="1918" height="907" alt="order-confirmation" src="https://github.com/user-attachments/assets/e1a89cb1-8cb7-4341-8cf5-1ce83667a21f" /> |
+| 📡 Live Order Status | <img width="962" height="887" alt="live-status" src="https://github.com/user-attachments/assets/46bb6eaf-b318-4cba-aeb2-c80f46c9c22a" /> |
+| 🔐 Staff Portal | <img width="1091" height="783" alt="auth" src="https://github.com/user-attachments/assets/d0730f91-41d3-4c77-8050-1a2e40aa1f34" /> |
+| 👤 Profile Page | <img width="889" height="892" alt="profile" src="https://github.com/user-attachments/assets/3cac7e25-7d57-4f10-9b17-fa61a284e4e4" /> |
+| 🛠️ Admin Dashboard | <img width="1880" height="901" alt="admin-dashboard" src="https://github.com/user-attachments/assets/b6edaba7-5110-4ec9-a590-714948c942d2" /> |
+| 🍳 Kitchen View | <img width="1897" height="872" alt="kitchen-view" src="https://github.com/user-attachments/assets/838048a0-5ac4-48cb-bae3-110de35feb2c" /> |
+| 📦 Order Management | <img width="1871" height="895" alt="order-management" src="https://github.com/user-attachments/assets/ac932a73-4cbe-4998-9686-82f70db5a39b" /> |
+| 🗂️ Menu Management |<img width="1882" height="897" alt="menu-management" src="https://github.com/user-attachments/assets/9531e59b-6f83-468a-9a27-5f21f7d9be99" /> |
 
-### Backend
-- **Framework**: Django + Django REST Framework
-- **Database**: SQLite
-- **Authentication**: Django's built-in authentication system
-- **API Design**: RESTful endpoints with role-based permissions
+---
+
+## ✨ Features
+
+### Customer Side
+- Smooth-scroll landing page with animated **3D menu cards** (Framer Motion + Lenis)
+- Browse menu items by category, view ingredients, spiciness, calories
+- Add to cart with **customizations**, persistent via `localStorage`
+- Register / login with token-based authentication
+- Place orders as **guest or logged-in user**
+- Real-time **live order status** tracking (Pending → Preparing → Ready)
+- Order history in profile (authenticated users only)
+
+### Admin Side
+- Secure admin login (separate from customer auth)
+- **Dashboard** with overview stats (powered by Recharts)
+- **Menu Management** — add, edit, delete menu items
+- **Order Management** — view and update all orders
+- **Kitchen View** — live feed of incoming orders for kitchen staff
+
+---
+
+## 🛠️ Tech Stack
 
 ### Frontend
-- **Framework**: React 19.2.0 with Vite
-- **Styling**: Tailwind CSS with PostCSS
-- **Routing**: React Router v7
-- **HTTP Client**: Axios
-- **Animations**: Framer Motion & Lenis smooth scroll
-- **UI Components**: Lucide React icons
-- **Charts**: Recharts for analytics
-- **Effects**: Canvas Confetti for celebrations
-- **Linting**: ESLint for code quality
+| Tech | Purpose |
+|------|---------|
+| React 19 + Vite 7 | UI framework & build tool |
+| React Router v7 | Client-side routing |
+| Tailwind CSS v3 | Utility-first styling |
+| Framer Motion | Animations & 3D card effects |
+| Lenis | Smooth scroll |
+| Axios | API communication |
+| Recharts | Admin dashboard charts |
+| Lucide React | Icons |
+| Canvas Confetti | Order confirmation celebration 🎉 |
 
-## Project Structure
+### Backend
+| Tech | Purpose |
+|------|---------|
+| Django 6 | Web framework |
+| Django REST Framework | API layer |
+| DRF Token Auth | Authentication |
+| django-cors-headers | CORS handling |
+| SQLite | Development database |
+
+---
+
+## 📁 Project Structure
 
 ```
-restaurant-project/
-├── backend/                          # Django backend
-│   ├── manage.py
-│   ├── db.sqlite3
-│   ├── api/                         # Main API app
-│   │   ├── models.py               # Data models (MenuItem, Order, Review, etc.)
-│   │   ├── views.py                # API viewsets
-│   │   ├── serializers.py          # DRF serializers
-│   │   ├── urls.py                 # API routing
-│   │   └── migrations/             # Database migrations
-│   └── backend/                     # Project settings
-│       ├── settings.py
-│       ├── urls.py
-│       └── wsgi.py
-└── frontend/                         # React frontend
-    ├── src/
-    │   ├── App.jsx                 # Main app component
-    │   ├── api.js                  # API client configuration
-    │   ├── pages/                  # Page components
-    │   │   ├── LandingPage.jsx
-    │   │   ├── MenuPage.jsx
-    │   │   ├── CartPage.jsx
-    │   │   ├── DishDetailsPage.jsx
-    │   │   ├── LiveStatusPage.jsx
-    │   │   ├── OrderConfirmationPage.jsx
-    │   │   ├── AuthPage.jsx
-    │   │   └── ProfilePage.jsx
-    │   ├── admin/                  # Admin components
-    │   │   ├── AdminLayout.jsx
-    │   │   ├── AdminLogin.jsx
-    │   │   ├── Dashboard.jsx
-    │   │   ├── KitchenView.jsx
-    │   │   ├── MenuManagement.jsx
-    │   │   └── OrderManagement.jsx
-    │   ├── components/             # Reusable components
-    │   ├── context/                # React context (UserContext)
-    │   └── main.jsx
-    ├── package.json
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── index.html
+RESTAURANT-PROJECT/
+├── backend/
+│   ├── api/                    # Django App — models, views, serializers, URLs
+│   └── backend/                # Django project config — settings, root URLs
+├── frontend/
+│   └── src/
+│       ├── admin/              # Admin panel components
+│       ├── components/         # Reusable UI (Card3D, etc.)
+│       ├── context/            # UserContext — global auth state
+│       ├── pages/              # Customer-facing pages
+│       └── api.js              # Axios base configuration
+└── venv/
 ```
 
-## Getting Started
+---
+
+## 🗄️ Data Models
+
+- **Category** — groups menu items (e.g. Starters, Mains)
+- **MenuItem** — name, price, description, veg flag, spiciness, calories, image URL, ingredients
+- **Review** — rating (1–5) + comment per menu item
+- **Order** — linked to a user (nullable for guests), table number, total, status lifecycle
+- **OrderItem** — line items within an order with quantity and optional customization
+
+### Order Status Flow
+```
+PENDING → PREPARING → READY
+                    ↘ CANCELLED
+```
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
-- pip (Python package manager)
-- npm (Node package manager)
+- Python 3.10+
+- Node.js 18+
 
 ### Backend Setup
 
-1. Navigate to the backend directory:
 ```bash
 cd backend
-```
+python -m venv ../venv
+source ../venv/bin/activate        # Windows: ..\venv\Scripts\activate
+pip install django djangorestframework django-cors-headers
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Run migrations:
-```bash
 python manage.py migrate
-```
-
-5. Create a superuser for admin access:
-```bash
-python manage.py createsuperuser
-```
-
-6. Start the development server:
-```bash
+python manage.py createsuperuser   # For admin access
 python manage.py runserver
 ```
 
-The backend API will be available at `http://localhost:8000`
+Backend runs at: `http://localhost:8000`
 
 ### Frontend Setup
 
-1. Navigate to the frontend directory:
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Start the development server:
-```bash
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173`
+Frontend runs at: `http://localhost:5173`
 
-## API Endpoints
+---
 
-### Menu Items
-- `GET /api/menu-items/` - List all menu items
-- `GET /api/menu-items/{id}/` - Get a specific menu item
-- `POST /api/menu-items/` - Create a menu item (Admin only)
-- `PUT /api/menu-items/{id}/` - Update a menu item (Admin only)
-- `DELETE /api/menu-items/{id}/` - Delete a menu item (Admin only)
+## 🔌 API Endpoints
 
-### Orders
-- `GET /api/orders/` - List user's orders (Authenticated users see their orders, Staff see all)
-- `POST /api/orders/` - Create a new order (Guests and authenticated users)
-- `GET /api/orders/{id}/` - Get order details
-- `PATCH /api/orders/{id}/update_status/` - Update order status (Admin only)
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/menu-items/` | List all menu items | Public |
+| GET | `/api/menu-items/:id/` | Menu item detail | Public |
+| POST | `/api/menu-items/` | Create menu item | Admin |
+| PUT/PATCH | `/api/menu-items/:id/` | Update menu item | Admin |
+| DELETE | `/api/menu-items/:id/` | Delete menu item | Admin |
+| GET | `/api/reviews/` | List all reviews | Public |
+| POST | `/api/reviews/` | Add a review | Public |
+| POST | `/api/orders/` | Place an order | Public (guest ok) |
+| GET | `/api/orders/` | List orders (own / all for staff) | Authenticated |
+| PATCH | `/api/orders/:id/update_status/` | Update order status | Admin |
 
-### Reviews
-- `GET /api/reviews/` - List all reviews
-- `POST /api/reviews/` - Create a review
-- `GET /api/reviews/{id}/` - Get review details
+### Authentication
 
-## Database Models
+```bash
+# Obtain token
+POST /api-token-auth/
+{ "username": "...", "password": "..." }
 
-### MenuItem
-- Category relationship with cascading delete
-- Name, description, price
-- Dietary information (vegetarian flag)
-- Availability status
-- Image URL
-- Ingredients list
-- Spiciness level
-- Calorie count
+# Use in requests
+Authorization: Token <your_token>
+```
 
-### Order
-- Associated user (for authenticated orders)
-- Order ID (unique)
-- Table number
-- Total amount
-- Status tracking (Pending, Preparing, Ready, Cancelled)
-- Timestamp
+---
 
-### OrderItem
-- Links to Order and MenuItem
-- Quantity
-- Item customization notes
+## 🛣️ Frontend Routes
 
-### Review
-- MenuItem reference
-- Customer name
-- Rating (1-5)
-- Comment
-- Timestamp
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/` | LandingPage | Hero / marketing page |
+| `/auth` | AuthPage | Login & Register |
+| `/menu` | MenuPage | Browse all dishes |
+| `/dish/:id` | DishDetailsPage | Item detail + reviews |
+| `/cart` | CartPage | Cart review & checkout |
+| `/order-confirmation/:orderId` | OrderConfirmationPage | Success screen |
+| `/status/:orderId` | LiveStatusPage | Real-time order tracker |
+| `/profile` | ProfilePage | Order history & account |
+| `/admin/login` | AdminLogin | Admin authentication |
+| `/admin/dashboard` | Dashboard | Stats overview |
+| `/admin/menu` | MenuManagement | CRUD for menu items |
+| `/admin/orders` | OrderManagement | All orders view |
+| `/admin/kitchen` | KitchenView | Kitchen order feed |
 
-## Key Features Implementation
+---
 
-### Authentication & Authorization
-- Guest ordering available for anonymous users
-- User authentication required for order history
-- Admin/Staff role-based access control
-- Automatic user association with orders for authenticated requests
+## 🔧 Environment & Configuration
 
-### Real-time Order Tracking
-- Live status updates visible to customers
-- Kitchen view for staff to manage preparation
-- Order status progression: Pending → Preparing → Ready
+The backend uses SQLite by default (`db.sqlite3`). CORS is open for all origins in development (`CORS_ALLOW_ALL_ORIGINS = True`).
 
-### Menu Management
-- Admin interface for adding/editing/removing items
-- Detailed item information (ingredients, nutrition, spiciness)
-- Availability toggles
+> ⚠️ **Before deploying to production:**
+> - Replace `SECRET_KEY` in `settings.py` with a secure value (use environment variables)
+> - Set `DEBUG = False`
+> - Configure `ALLOWED_HOSTS`
+> - Restrict `CORS_ALLOWED_ORIGINS` to your frontend domain
+> - Swap SQLite for PostgreSQL or another production database
 
-### User Context
-- Global user state management using React Context
-- Persistent authentication across pages
-
-## Development Workflow
-
-1. **Backend Development**: Run Django server with `python manage.py runserver`
-2. **Frontend Development**: Run Vite dev server with `npm run dev`
-3. **Linting**: Check code quality with `npm run lint`
-4. **Build**: Create production build with `npm run build`
-
-## Future Enhancements
-
-- Payment gateway integration
-- Email order confirmations
-- SMS notifications for order updates
-- Advanced analytics and reporting
-- Inventory management system
-- Reservation/Table booking system
-- Customer loyalty program
-- Multi-location support
-- Mobile app (React Native)
-
-## License
-
-This project is open source and available under the MIT License.
-
-## Author
-
-Built as a full-stack web development project demonstrating proficiency in Django REST APIs, React frontend development, and modern web technologies.
+---
