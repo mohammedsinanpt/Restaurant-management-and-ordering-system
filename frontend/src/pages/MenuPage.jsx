@@ -2,96 +2,38 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchMenu } from '../api';
 import Card3D from '../components/Card3D';
-import { ShoppingCart, Plus, Search, ChefHat, Activity, LogIn } from 'lucide-react'; 
-import { useUser } from '../context/UserContext'; 
-
-const MOCK_MENU = [
-    {
-        id: 1,
-        name: "Butter Chicken Royale",
-        category_name: "Main Course",
-        price: 380,
-        description: "Tender succulent chicken chunks cooked in a rich, creamy tomato gravy with premium saffron.",
-        is_veg: false,
-        image_url: "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-        id: 2,
-        name: "Paneer Tikka Masala",
-        category_name: "Main Course",
-        price: 320,
-        description: "Char-grilled paneer cubes simmered in a spicy, aromatic gravy with bell peppers.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-        id: 3,
-        name: "Garlic Naan Basket",
-        category_name: "Starters",
-        price: 120,
-        description: "Assortment of soft, fluffy flatbreads topped with minced garlic and artisanal butter.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-        id: 4,
-        name: "Hyderabadi Dum Biryani",
-        category_name: "Main Course",
-        price: 450,
-        description: "Aromatic basmati rice slow-cooked with spiced chicken and exotic herbs in a sealed clay pot.",
-        is_veg: false,
-        image_url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-        id: 5,
-        name: "Mango Lassi",
-        category_name: "Drinks",
-        price: 150,
-        description: "Thick, creamy yogurt blended with fresh Alphonso mango pulp and a hint of cardamom.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1543362174-8b631d8c11e4?auto=format&fit=crop&w=800&q=80"
-    }
-];
+import { ShoppingCart, Plus, Search, ChefHat, Activity, LogIn, AlertCircle } from 'lucide-react';
+import { useUser } from '../context/UserContext';
 
 const MenuPage = ({ addToCart, cart }) => {
     const navigate = useNavigate();
-    const { currentUser } = useUser(); 
-    
+    const { currentUser } = useUser();
+
     const [menu, setMenu] = useState([]);
     const [filter, setFilter] = useState('All');
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
-            const savedMenu = localStorage.getItem('menuItems');
-            
-            if (savedMenu) {
-                setMenu(JSON.parse(savedMenu));
+            setLoading(true);
+            setError(false);
+            try {
+                const { data } = await fetchMenu();
+                setMenu(data);
+            } catch (err) {
+                console.error('Failed to load menu:', err);
+                setError(true);
+            } finally {
                 setLoading(false);
-            } else {
-                try {
-                    const { data } = await fetchMenu();
-                    if (data && data.length > 0) {
-                        setMenu(data);
-                        localStorage.setItem('menuItems', JSON.stringify(data));
-                    } else {
-                        setMenu(MOCK_MENU);
-                        localStorage.setItem('menuItems', JSON.stringify(MOCK_MENU));
-                    }
-                } catch (error) {
-                    setMenu(MOCK_MENU);
-                    localStorage.setItem('menuItems', JSON.stringify(MOCK_MENU));
-                } finally {
-                    setLoading(false);
-                }
             }
         };
         loadData();
     }, []);
 
     const filteredMenu = menu.filter(item => {
-        const category = item.category || item.category_name; 
+        const category = item.category_name; 
         return (
             (filter === 'All' || category === filter) &&
             item.name.toLowerCase().includes(search.toLowerCase())
@@ -102,7 +44,7 @@ const MenuPage = ({ addToCart, cart }) => {
 
     // Helper to render the correct badge
     const renderBadge = (item) => {
-        const category = item.category || item.category_name;
+        const category = item.category_name;
         
         if (category === 'Drinks') {
             return (
@@ -246,6 +188,11 @@ const MenuPage = ({ addToCart, cart }) => {
                             <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mb-4" />
                             <p className="text-zinc-400">Curating the menu...</p>
                         </div>
+                    ) : error ? (
+                        <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500 gap-3">
+                            <AlertCircle className="w-10 h-10 text-red-500" />
+                            <p>Couldn't load the menu. Please check your connection and try again.</p>
+                        </div>
                     ) : filteredMenu.length === 0 ? (
                         <div className="col-span-full text-center py-20 text-zinc-500">
                             <p>No dishes found matching your search.</p>
@@ -271,7 +218,7 @@ const MenuPage = ({ addToCart, cart }) => {
                                             </div>
 
                                             {/* Sold Out Overlay */}
-                                            {item.available === false && (
+                                            {item.is_available === false && (
                                                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-30">
                                                     <span className="text-white font-bold border-2 border-white px-6 py-2 rounded-lg uppercase tracking-widest transform -rotate-12">Sold Out</span>
                                                 </div>
@@ -291,19 +238,19 @@ const MenuPage = ({ addToCart, cart }) => {
                                             </div>
                                             
                                             <button 
-                                                disabled={item.available === false}
+                                                disabled={item.is_available === false}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    if(item.available !== false) addToCart(item);
+                                                    if(item.is_available !== false) addToCart(item);
                                                 }}
                                                 className={`w-full mt-auto py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-300 active:scale-95 group/btn ${
-                                                    item.available !== false
+                                                    item.is_available !== false
                                                     ? 'bg-white text-zinc-950 hover:bg-orange-500 hover:text-white hover:shadow-lg hover:shadow-orange-500/30' 
                                                     : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                                                 }`}
                                                 style={{ transform: "translateZ(40px)" }}
                                             >
-                                                {item.available !== false ? (
+                                                {item.is_available !== false ? (
                                                     <>
                                                         <Plus size={18} className="group-hover/btn:rotate-90 transition-transform" /> 
                                                         Add to Order

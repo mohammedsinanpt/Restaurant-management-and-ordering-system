@@ -95,8 +95,9 @@ RESTAURANT-PROJECT/
 - **Category** — groups menu items (e.g. Starters, Mains)
 - **MenuItem** — name, price, description, veg flag, spiciness, calories, image URL, ingredients
 - **Review** — rating (1–5) + comment per menu item
-- **Order** — linked to a user (nullable for guests), table number, total, status lifecycle
+- **Order** — linked to a user (nullable for guests), table number, total (computed server-side), status lifecycle
 - **OrderItem** — line items within an order with quantity and optional customization
+- **UserProfile** — phone/address extension on Django's built-in `User`, auto-created on registration
 
 ### Order Status Flow
 ```
@@ -118,14 +119,22 @@ PENDING → PREPARING → READY
 cd backend
 python -m venv ../venv
 source ../venv/bin/activate        # Windows: ..\venv\Scripts\activate
-pip install django djangorestframework django-cors-headers
+pip install -r requirements.txt
+
+cp .env.example .env               # fill in real values for any deployed instance;
+                                    # local dev works with the defaults (falls back to SQLite)
 
 python manage.py migrate
-python manage.py createsuperuser   # For admin access
+python manage.py createsuperuser   # For admin access (use an email as the username)
 python manage.py runserver
 ```
 
 Backend runs at: `http://localhost:8000`
+
+With no `.env`, the backend runs against a local SQLite database — it never touches the
+production database unless `DATABASE_URL` is explicitly set. See `.env.example` for all
+supported variables (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`,
+`DATABASE_URL`, `CORS_ALLOWED_ORIGINS`).
 
 ### Frontend Setup
 
@@ -135,7 +144,12 @@ npm install
 npm run dev
 ```
 
-Frontend runs at: `http://localhost:5173`
+Frontend runs at: `http://localhost:5173`, and talks to the deployed backend by default.
+To point it at your local backend instead, create `frontend/.env.local`:
+
+```
+VITE_API_URL=http://127.0.0.1:8000/api
+```
 
 ---
 
@@ -144,26 +158,41 @@ Frontend runs at: `http://localhost:5173`
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
 | GET | `/api/menu-items/` | List all menu items | Public |
-| GET | `/api/menu-items/:id/` | Menu item detail | Public |
-| POST | `/api/menu-items/` | Create menu item | Admin |
-| PUT/PATCH | `/api/menu-items/:id/` | Update menu item | Admin |
-| DELETE | `/api/menu-items/:id/` | Delete menu item | Admin |
+| GET | `/api/menu-items/:id/` | Menu item detail (includes nested reviews) | Public |
+| POST | `/api/menu-items/` | Create menu item | Admin (staff) |
+| PUT/PATCH | `/api/menu-items/:id/` | Update menu item | Admin (staff) |
+| DELETE | `/api/menu-items/:id/` | Delete menu item | Admin (staff) |
+| GET | `/api/categories/` | List categories | Public |
+| POST | `/api/categories/` | Create category | Admin (staff) |
 | GET | `/api/reviews/` | List all reviews | Public |
 | POST | `/api/reviews/` | Add a review | Public |
-| POST | `/api/orders/` | Place an order | Public (guest ok) |
+| POST | `/api/orders/` | Place an order (total is computed server-side) | Public (guest ok) |
 | GET | `/api/orders/` | List orders (own / all for staff) | Authenticated |
-| PATCH | `/api/orders/:id/update_status/` | Update order status | Admin |
+| GET | `/api/orders/track/:order_id/` | Look up one order by its `ORD-XXXXXX` id | Public |
+| PATCH | `/api/orders/:id/update_status/` | Update order status | Admin (staff) |
+| POST | `/api/register/` | Create an account | Public |
+| POST | `/api/login/` | Obtain an auth token | Public |
+| GET/PATCH | `/api/profile/` | View/update your own name, phone, address | Authenticated |
 
 ### Authentication
 
 ```bash
-# Obtain token
-POST /api-token-auth/
-{ "username": "...", "password": "..." }
+# Register
+POST /api/register/
+{ "email": "...", "password": "...", "name": "..." }
 
-# Use in requests
+# Obtain token
+POST /api/login/
+{ "username": "...", "password": "..." }   # username = the email used at registration
+
+# Both return: { "token": "...", "user": { "id", "username", "email", "name", "phone", "address", "is_staff" } }
+
+# Use the token in subsequent requests
 Authorization: Token <your_token>
 ```
+
+Staff accounts (`is_staff=True`, e.g. via `createsuperuser`) use the same login and get
+access to the `/admin` panel in the frontend; regular accounts don't.
 
 ---
 
@@ -189,13 +218,15 @@ Authorization: Token <your_token>
 
 ## 🔧 Environment & Configuration
 
-The backend uses SQLite by default (`db.sqlite3`). CORS is open for all origins in development (`CORS_ALLOW_ALL_ORIGINS = True`).
+All backend configuration is environment-driven (see `backend/.env.example`) — nothing
+sensitive is hardcoded in `settings.py`:
 
-> ⚠️ **Before deploying to production:**
-> - Replace `SECRET_KEY` in `settings.py` with a secure value (use environment variables)
-> - Set `DEBUG = False`
-> - Configure `ALLOWED_HOSTS`
-> - Restrict `CORS_ALLOWED_ORIGINS` to your frontend domain
-> - Swap SQLite for PostgreSQL or another production database
+- `DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS` — standard Django settings
+- `DATABASE_URL` — a Postgres URL in production; omitted, it falls back to local SQLite
+- `CORS_ALLOWED_ORIGINS` — comma-separated list of allowed frontend origins
+
+> ⚠️ If you ever hardcode a real database URL, API key, or secret key in a file that gets
+> committed, rotate that credential immediately — removing it from the file afterwards does
+> **not** invalidate it, and it remains recoverable from git history.
 
 ---

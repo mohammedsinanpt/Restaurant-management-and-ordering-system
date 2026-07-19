@@ -1,19 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle, Fingerprint } from 'lucide-react';
+import { Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useUser } from '../context/UserContext'; // Import the hook
+
+const extractErrorMessage = (err) => {
+  const data = err?.response?.data;
+  if (!data) return 'Something went wrong. Please try again.';
+  if (typeof data.error === 'string') return data.error;
+  if (Array.isArray(data.error)) return data.error.join(' ');
+  if (Array.isArray(data.non_field_errors)) return data.non_field_errors.join(' ');
+  return 'Something went wrong. Please try again.';
+};
 
 const AuthPage = () => {
   const navigate = useNavigate();
-  const { login } = useUser(); // Get the login function from Context
-  
+  const { login, register } = useUser(); // Get auth functions from Context
+
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     name: '',
-    identifier: '', // Captures Email OR User ID
+    identifier: '', // Email address
     password: ''
   });
-  
+
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -23,66 +32,28 @@ const AuthPage = () => {
     setError('');
   };
 
-  const handleAuth = (e) => {
+  const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // Simulate network request
-    setTimeout(() => {
-      try {
-        const existingUsers = JSON.parse(localStorage.getItem('users') || '[]');
-
-        if (isLogin) {
-          // --- LOGIN LOGIC ---
-          const user = existingUsers.find(u => 
-            // Match Email OR User ID (UID)
-            (u.email === formData.identifier || u.uid === formData.identifier) && 
-            u.password === formData.password
-          );
-
-          if (user) {
-            // SUCCESS: Call the Context Login function
-            login(user); 
-            navigate('/menu');
-          } else {
-            setError('Invalid credentials. Please check your Email/ID and Password.');
-          }
-        } else {
-          // --- REGISTRATION LOGIC ---
-          // Ensure email is unique
-          const userExists = existingUsers.some(u => u.email === formData.identifier);
-
-          if (userExists) {
-            setError('User already exists with this email. Please login.');
-          } else {
-            // Create New User
-            const newUser = {
-              uid: Date.now().toString(), // Unique User ID
-              name: formData.name,
-              email: formData.identifier, // In register mode, identifier is email
-              password: formData.password,
-              joinedAt: new Date().toISOString(),
-              phone: '',
-              address: ''
-            };
-
-            // Save to Database (LocalStorage 'users' array)
-            existingUsers.push(newUser);
-            localStorage.setItem('users', JSON.stringify(existingUsers));
-            
-            // SUCCESS: Call the Context Login function
-            login(newUser);
-            navigate('/menu');
-          }
-        }
-      } catch (err) {
-        console.error(err);
-        setError('Something went wrong. Please try again.');
-      } finally {
-        setLoading(false);
+    try {
+      if (isLogin) {
+        await login(formData.identifier, formData.password);
+      } else {
+        await register({
+          name: formData.name,
+          email: formData.identifier,
+          password: formData.password,
+        });
       }
-    }, 1000);
+      navigate('/menu');
+    } catch (err) {
+      console.error(err);
+      setError(extractErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -128,22 +99,18 @@ const AuthPage = () => {
             </div>
           )}
 
-          {/* Email / ID Field */}
+          {/* Email Field */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider ml-1">
-              {isLogin ? "Email or User ID" : "Email Address"}
+              Email Address
             </label>
             <div className="relative group">
-              {isLogin ? (
-                <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-orange-500 transition-colors" />
-              ) : (
-                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-orange-500 transition-colors" />
-              )}
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-orange-500 transition-colors" />
               <input
-                type={isLogin ? "text" : "email"} // Use text for login (allows IDs), email for register
+                type="email"
                 name="identifier"
                 required
-                placeholder={isLogin ? "email@example.com or User ID" : "you@example.com"}
+                placeholder="you@example.com"
                 value={formData.identifier}
                 onChange={handleChange}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-zinc-600 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all"

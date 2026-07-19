@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Plus, Minus, ArrowRight, UserCircle, Lock, Loader2, ShoppingBag } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowRight, UserCircle, Lock, Loader2, ShoppingBag, AlertCircle, Hash } from 'lucide-react';
 import { useUser } from '../context/UserContext'; // <--- 1. Import Context
+import { createOrder } from '../api';
+
+const extractErrorMessage = (err) => {
+    const data = err?.response?.data;
+    if (!data) return 'Something went wrong placing your order.';
+    if (typeof data.error === 'string') return data.error;
+    if (Array.isArray(data.error)) return data.error.join(' ');
+    return 'Something went wrong placing your order.';
+};
 
 const CartPage = ({ cart, updateQuantity, clearCart }) => {
     const navigate = useNavigate();
     const { currentUser } = useUser(); // <--- 2. Get User from Context
     const [loading, setLoading] = useState(false);
+    const [tableNumber, setTableNumber] = useState('');
+    const [error, setError] = useState('');
 
     // Calculations
     const subtotal = cart.reduce((acc, item) => acc + (parseFloat(item.price) * item.quantity), 0);
@@ -15,55 +26,39 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
     const total = subtotal + serviceCharge + tax;
 
     const handlePlaceOrder = async () => {
-        setLoading(true);
+        setError('');
 
-        // --- 1. AUTH CHECK ---
-        if (!currentUser) {
-            alert("Please Sign In to confirm your order.");
-            setLoading(false);
-            navigate('/auth');
+        const table = parseInt(tableNumber, 10);
+        if (!table || table <= 0) {
+            setError('Please enter a valid table number.');
             return;
         }
 
-        // Simulate network delay for "Processing"
-        setTimeout(() => {
-            try {
-                // --- 2. CREATE ORDER OBJECT ---
-                const newOrderId = `ORD-${Date.now().toString().slice(-6)}`;
-                
-                const orderPayload = {
-                    id: newOrderId,
-                    userId: currentUser.uid, // Link order to this user
-                    userName: currentUser.name,
-                    items: cart,
-                    subtotal: subtotal,
-                    total: parseFloat(total.toFixed(2)),
-                    status: 'PENDING',
-                    timestamp: new Date().toISOString()
-                };
+        setLoading(true);
+        try {
+            const orderPayload = {
+                table_number: table,
+                items: cart.map(item => ({
+                    menu_item: item.id,
+                    quantity: item.quantity,
+                    customization: item.customization || '',
+                })),
+            };
 
-                // --- 3. SAVE TO LOCAL DATABASE ---
-                const allOrders = JSON.parse(localStorage.getItem('allOrders') || '[]');
-                allOrders.push(orderPayload);
-                localStorage.setItem('allOrders', JSON.stringify(allOrders));
-                
-                // --- 4. SUCCESS ---
-                console.log("Order Placed:", orderPayload);
-                
-                // Clear cart
-                clearCart();
-                
-                // --- REDIRECT TO CONFIRMATION PAGE ---
-                // Updated to point to your OrderConfirmationPage
-                navigate(`/order-confirmation/${newOrderId}`); 
-                
-            } catch (error) {
-                console.error("Order Failed:", error);
-                alert("Something went wrong placing your order.");
-            } finally {
-                setLoading(false);
-            }
-        }, 1500);
+            const { data } = await createOrder(orderPayload);
+
+            // Clear cart
+            clearCart();
+
+            // --- REDIRECT TO CONFIRMATION PAGE ---
+            navigate(`/order-confirmation/${data.order_id}`);
+
+        } catch (err) {
+            console.error("Order Failed:", err);
+            setError(extractErrorMessage(err));
+        } finally {
+            setLoading(false);
+        }
     };
 
     // EMPTY CART VIEW
@@ -175,6 +170,23 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                 {/* Bill Summary */}
                 <div className="h-fit bg-zinc-900 p-8 rounded-3xl border border-zinc-800 shadow-xl lg:sticky lg:top-8">
                     <h3 className="text-xl font-bold mb-6 text-white">Payment Summary</h3>
+
+                    {/* Table Number */}
+                    <div className="mb-6">
+                        <label className="block text-sm font-medium text-zinc-400 mb-2">Table Number</label>
+                        <div className="relative">
+                            <Hash size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600" />
+                            <input
+                                type="number"
+                                min="1"
+                                value={tableNumber}
+                                onChange={(e) => setTableNumber(e.target.value)}
+                                placeholder="e.g. 4"
+                                className="w-full pl-11 pr-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white outline-none focus:border-orange-500/50 transition-all"
+                            />
+                        </div>
+                    </div>
+
                     <div className="space-y-4 mb-8 text-zinc-400">
                         <div className="flex justify-between">
                             <span>Subtotal</span>
@@ -193,16 +205,19 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                             <span className="text-orange-500">₹{total.toFixed(2)}</span>
                         </div>
                     </div>
-                    
+
+                    {error && (
+                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm">
+                            <AlertCircle className="w-5 h-5 shrink-0" />
+                            {error}
+                        </div>
+                    )}
+
                     {/* The Checkout Button */}
                     <button
                         onClick={handlePlaceOrder}
                         disabled={loading}
-                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex justify-between px-6 items-center group ${
-                            currentUser 
-                            ? 'bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20' 
-                            : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                        } ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex justify-between px-6 items-center group bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                     >
                         {loading ? (
                             <div className="flex items-center gap-2 mx-auto">
@@ -211,19 +226,15 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                             </div>
                         ) : (
                             <>
-                                <span>{currentUser ? 'Confirm Order' : 'Login to Order'}</span>
-                                {currentUser ? (
-                                    <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
-                                ) : (
-                                    <Lock className="w-5 h-5" />
-                                )}
+                                <span>Confirm Order</span>
+                                <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
                             </>
                         )}
                     </button>
-                    
+
                     {!currentUser && (
                         <p className="text-center text-xs text-zinc-500 mt-4">
-                            You need to be logged in to complete your purchase.
+                            Ordering as a guest — <button onClick={() => navigate('/auth')} className="underline hover:text-orange-500">sign in</button> to save your order history.
                         </p>
                     )}
                 </div>

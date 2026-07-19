@@ -1,76 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { Eye, Check, X, Clock, MapPin, ChefHat, ShoppingBag } from 'lucide-react';
-
-// Mock Data to initialize if LocalStorage is empty (so you have something to test)
-const MOCK_INITIAL_ORDERS = [
-    { 
-        id: 'ORD-101', 
-        table: 4, 
-        total: 1250, 
-        status: 'PENDING', 
-        timestamp: new Date().toISOString(),
-        items: [
-            { name: "Butter Chicken Royale", quantity: 2, price: 380 },
-            { name: "Garlic Naan Basket", quantity: 1, price: 120 }
-        ]
-    },
-    { 
-        id: 'ORD-102', 
-        table: 2, 
-        total: 450, 
-        status: 'PREPARING', 
-        timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // 15 mins ago
-        items: [
-            { name: "Hyderabadi Dum Biryani", quantity: 1, price: 450 }
-        ]
-    },
-];
+import React, { useState, useEffect, useCallback } from 'react';
+import { Eye, Check, X, Clock, ChefHat, ShoppingBag } from 'lucide-react';
+import { fetchOrders, updateOrderStatus as apiUpdateOrderStatus } from '../api';
 
 const OrderManagement = () => {
   const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null); // For the Details Modal
 
-  // 1. Load Orders from LocalStorage on mount
-  useEffect(() => {
-    const savedOrders = localStorage.getItem('allOrders');
-    if (savedOrders) {
-        setOrders(JSON.parse(savedOrders));
-    } else {
-        // If empty, load mock data so you can see how it looks
-        setOrders(MOCK_INITIAL_ORDERS);
-        localStorage.setItem('allOrders', JSON.stringify(MOCK_INITIAL_ORDERS));
+  const loadOrders = useCallback(async () => {
+    try {
+      const { data } = await fetchOrders();
+      setOrders(data);
+    } catch (e) {
+      console.error('Failed to load orders:', e);
+    } finally {
+      setLoading(false);
     }
-
-    // Optional: Poll every 5 seconds to check for new orders from customers
-    const interval = setInterval(() => {
-        const freshOrders = localStorage.getItem('allOrders');
-        if (freshOrders) {
-            // Only update if different to prevent re-renders (simple check)
-            const parsed = JSON.parse(freshOrders);
-            if(JSON.stringify(parsed) !== JSON.stringify(orders)) {
-                setOrders(parsed);
-            }
-        }
-    }, 5000);
-
-    return () => clearInterval(interval);
   }, []);
 
-  // 2. Function to Update Status (Syncs to LocalStorage)
-  const updateOrderStatus = (orderId, newStatus) => {
-    const updatedOrders = orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
-    );
-    setOrders(updatedOrders);
-    localStorage.setItem('allOrders', JSON.stringify(updatedOrders));
+  // 1. Load orders on mount, then poll for new ones
+  useEffect(() => {
+    loadOrders();
+    const interval = setInterval(loadOrders, 5000);
+    return () => clearInterval(interval);
+  }, [loadOrders]);
+
+  // 2. Function to update status against the real backend
+  const updateStatus = async (orderPk, newStatus) => {
+    const previous = orders;
+    setOrders(prev => prev.map(o => (o.id === orderPk ? { ...o, status: newStatus } : o)));
+    try {
+      await apiUpdateOrderStatus(orderPk, newStatus);
+    } catch (e) {
+      console.error('Failed to update order status:', e);
+      setOrders(previous); // revert optimistic update on failure
+    }
   };
 
-  // 3. Delete/Reject Order
-  const deleteOrder = (orderId) => {
-    if(window.confirm("Are you sure you want to reject/remove this order?")) {
-        const updatedOrders = orders.filter(order => order.id !== orderId);
-        setOrders(updatedOrders);
-        localStorage.setItem('allOrders', JSON.stringify(updatedOrders));
+  // 3. Reject an order (kept as a status change, not a hard delete, to preserve order history)
+  const rejectOrder = (orderPk) => {
+    if (window.confirm("Are you sure you want to reject/cancel this order?")) {
+        updateStatus(orderPk, 'CANCELLED');
+        setSelectedOrder(null);
     }
   };
 
@@ -90,10 +61,14 @@ const OrderManagement = () => {
         case 'PENDING': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
         case 'PREPARING': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
         case 'READY': return 'bg-green-500/10 text-green-500 border-green-500/20';
-        case 'COMPLETED': return 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20';
+        case 'CANCELLED': return 'bg-red-500/10 text-red-500 border-red-500/20';
         default: return 'bg-zinc-500/10 text-zinc-500';
     }
   };
+
+  if (loading) {
+    return <div className="text-center py-20 text-zinc-500">Loading orders...</div>;
+  }
 
   return (
     <div className="space-y-6 pb-10">
@@ -114,20 +89,20 @@ const OrderManagement = () => {
 
       <div className="grid gap-4">
         {orders.length === 0 ? (
-            <div className="text-center py-20 text-zinc-500">No active orders found.</div>
+            <div className="text-center py-20 text-zinc-500">No orders found.</div>
         ) : (
             orders.map(order => (
             <div key={order.id} className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col lg:flex-row items-center justify-between shadow-lg hover:border-zinc-700 transition-all gap-6">
-                
+
                 {/* Order Info Left */}
                 <div className="flex items-center gap-6 w-full lg:w-auto">
                     <div className="bg-zinc-800 px-5 py-4 rounded-xl text-center min-w-[90px] border border-zinc-700">
                         <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Table</p>
-                        <p className="font-black text-3xl text-white">{order.table || "Takeaway"}</p>
+                        <p className="font-black text-3xl text-white">{order.table_number}</p>
                     </div>
                     <div>
                         <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-bold text-xl text-white">#{order.id.slice(-6).toUpperCase()}</h3>
+                            <h3 className="font-bold text-xl text-white">#{order.order_id.slice(-6).toUpperCase()}</h3>
                             <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${getStatusColor(order.status)}`}>
                                 {order.status}
                             </span>
@@ -135,9 +110,9 @@ const OrderManagement = () => {
                         <div className="flex items-center gap-4 text-sm text-zinc-400">
                             <span className="flex items-center gap-1"><ShoppingBag className="w-3 h-3"/> {order.items?.length || 0} Items</span>
                             <span className="w-1 h-1 bg-zinc-600 rounded-full"></span>
-                            <span className="text-orange-500 font-bold">₹{order.total}</span>
+                            <span className="text-orange-500 font-bold">₹{order.total_amount}</span>
                             <span className="w-1 h-1 bg-zinc-600 rounded-full"></span>
-                            <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {getTimeAgo(order.timestamp)}</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3 h-3"/> {getTimeAgo(order.created_at)}</span>
                         </div>
                     </div>
                 </div>
@@ -145,44 +120,46 @@ const OrderManagement = () => {
                 {/* Controls Right */}
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
                     {/* Status Dropdown */}
-                    <select 
+                    <select
                         value={order.status}
-                        onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                        onChange={(e) => updateStatus(order.id, e.target.value)}
                         className="w-full sm:w-40 bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-300 outline-none focus:border-orange-500 cursor-pointer"
                     >
                         <option value="PENDING">Pending</option>
                         <option value="PREPARING">Preparing</option>
                         <option value="READY">Ready</option>
-                        <option value="COMPLETED">Completed</option>
+                        <option value="CANCELLED">Cancelled</option>
                     </select>
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 w-full sm:w-auto">
-                        <button 
+                        <button
                             onClick={() => setSelectedOrder(order)}
-                            className="flex-1 sm:flex-none p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-colors" 
+                            className="flex-1 sm:flex-none p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-zinc-400 hover:text-white transition-colors"
                             title="View Details"
                         >
                             <Eye className="w-5 h-5"/>
                         </button>
-                        
+
                         {order.status === 'PENDING' && (
-                            <button 
-                                onClick={() => updateOrderStatus(order.id, 'PREPARING')}
-                                className="flex-1 sm:flex-none p-3 bg-green-900/20 hover:bg-green-900/40 border border-green-900/30 rounded-xl text-green-500 transition-colors" 
+                            <button
+                                onClick={() => updateStatus(order.id, 'PREPARING')}
+                                className="flex-1 sm:flex-none p-3 bg-green-900/20 hover:bg-green-900/40 border border-green-900/30 rounded-xl text-green-500 transition-colors"
                                 title="Accept Order"
                             >
                                 <Check className="w-5 h-5"/>
                             </button>
                         )}
-                        
-                        <button 
-                            onClick={() => deleteOrder(order.id)}
-                            className="flex-1 sm:flex-none p-3 bg-red-900/20 hover:bg-red-900/40 border border-red-900/30 rounded-xl text-red-500 transition-colors" 
-                            title="Reject/Delete"
-                        >
-                            <X className="w-5 h-5"/>
-                        </button>
+
+                        {order.status !== 'CANCELLED' && (
+                            <button
+                                onClick={() => rejectOrder(order.id)}
+                                className="flex-1 sm:flex-none p-3 bg-red-900/20 hover:bg-red-900/40 border border-red-900/30 rounded-xl text-red-500 transition-colors"
+                                title="Reject/Cancel"
+                            >
+                                <X className="w-5 h-5"/>
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -194,16 +171,16 @@ const OrderManagement = () => {
       {selectedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
             <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative animate-in zoom-in-95">
-                <button 
+                <button
                     onClick={() => setSelectedOrder(null)}
                     className="absolute top-4 right-4 p-2 hover:bg-zinc-800 rounded-full text-zinc-400 hover:text-white"
                 >
                     <X className="w-5 h-5" />
                 </button>
-                
+
                 <div className="mb-6">
                     <h3 className="text-xl font-bold text-white mb-1">Order Details</h3>
-                    <p className="text-zinc-500 text-sm">Order ID: #{selectedOrder.id}</p>
+                    <p className="text-zinc-500 text-sm">Order ID: #{selectedOrder.order_id}</p>
                 </div>
 
                 <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto">
@@ -213,29 +190,29 @@ const OrderManagement = () => {
                                 <div className="bg-zinc-800 w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-zinc-300">
                                     {item.quantity}x
                                 </div>
-                                <span className="text-zinc-200 font-medium">{item.name}</span>
-                                {item.variety && <span className="text-xs text-orange-500">({item.variety})</span>}
+                                <span className="text-zinc-200 font-medium">{item.item_name}</span>
+                                {item.customization && <span className="text-xs text-orange-500">({item.customization})</span>}
                             </div>
-                            <span className="text-zinc-400 font-mono">₹{item.price * item.quantity}</span>
+                            <span className="text-zinc-400 font-mono">₹{(item.price * item.quantity).toFixed(2)}</span>
                         </div>
                     ))}
                 </div>
 
                 <div className="flex justify-between items-center pt-4 border-t border-zinc-800">
                     <span className="text-zinc-400">Total Amount</span>
-                    <span className="text-2xl font-black text-orange-500">₹{selectedOrder.total}</span>
+                    <span className="text-2xl font-black text-orange-500">₹{selectedOrder.total_amount}</span>
                 </div>
 
                 <div className="mt-6 flex gap-3">
                     {selectedOrder.status === 'PENDING' ? (
-                        <button 
-                            onClick={() => { updateOrderStatus(selectedOrder.id, 'PREPARING'); setSelectedOrder(null); }}
-                            className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl"
+                        <button
+                            onClick={() => { updateStatus(selectedOrder.id, 'PREPARING'); setSelectedOrder(null); }}
+                            className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-bold rounded-xl flex items-center justify-center gap-2"
                         >
-                            Accept & Start Cooking
+                            <ChefHat className="w-5 h-5" /> Accept & Start Cooking
                         </button>
                     ) : (
-                        <button 
+                        <button
                             onClick={() => setSelectedOrder(null)}
                             className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl"
                         >

@@ -1,10 +1,32 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Menu, ShoppingBag, Utensils, LogOut } from 'lucide-react';
+import { useUser } from '../context/UserContext';
 
 const AdminLayout = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { currentUser, loading, logout } = useUser();
+
+    // Route guard: only staff accounts may see anything under /admin
+    useEffect(() => {
+        if (!loading && (!currentUser || !currentUser.is_staff)) {
+            navigate('/admin/login', { replace: true });
+        }
+    }, [loading, currentUser, navigate]);
+
+    if (loading || !currentUser || !currentUser.is_staff) {
+        return (
+            <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-white">
+                <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    const handleLogout = () => {
+        logout();
+        navigate('/admin/login');
+    };
 
     const NavItem = ({ to, icon: Icon, label }) => {
         const isActive = location.pathname.includes(to);
@@ -36,7 +58,7 @@ const AdminLayout = () => {
                     <NavItem to="/admin/kitchen" icon={Utensils} label="Kitchen View" />
                 </nav>
 
-                <button onClick={() => navigate('/')} className="flex items-center gap-2 text-zinc-500 hover:text-red-500 mt-auto px-4 py-2">
+                <button onClick={handleLogout} className="flex items-center gap-2 text-zinc-500 hover:text-red-500 mt-auto px-4 py-2">
                     <LogOut className="w-4 h-4" /> Logout
                 </button>
             </aside>

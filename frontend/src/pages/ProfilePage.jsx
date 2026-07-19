@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Save, Edit2, MapPin, Mail, Phone, LogOut, LogIn } from 'lucide-react';
-import { useUser } from '../context/UserContext'; // <--- IMPORT CONTEXT
+import { ArrowLeft, User, Save, Edit2, MapPin, Mail, Phone, LogOut, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { useUser } from '../context/UserContext';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
-  const { currentUser, updateUser, logout } = useUser(); // <--- USE CONTEXT HOOK
-  
+  const { currentUser, updateUser, logout } = useUser();
+
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -32,10 +34,22 @@ const ProfilePage = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = () => {
-    // Call Context Update Function
-    updateUser(formData);
-    setIsEditing(false);
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      await updateUser({
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address,
+      });
+      setIsEditing(false);
+    } catch (err) {
+      console.error(err);
+      setError('Could not save your changes. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -108,21 +122,31 @@ const ProfilePage = () => {
               <div>
                 <h2 className="text-xl font-bold text-white">{currentUser.name || 'User'}</h2>
                 <p className="text-zinc-500 text-sm">Personal Details</p>
-                <p className="text-zinc-600 text-xs font-mono mt-1">ID: {currentUser.uid}</p>
+                <p className="text-zinc-600 text-xs font-mono mt-1">ID: {currentUser.id}</p>
               </div>
             </div>
             
             <button
               onClick={() => isEditing ? handleSave() : setIsEditing(true)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                isEditing 
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/20' 
+              disabled={saving}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                isEditing
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-900/20'
                   : 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-900/20'
               }`}
             >
-              {isEditing ? <><Save size={18}/> Save</> : <><Edit2 size={18}/> Edit</>}
+              {isEditing ? (
+                saving ? <><Loader2 size={18} className="animate-spin"/> Saving</> : <><Save size={18}/> Save</>
+              ) : <><Edit2 size={18}/> Edit</>}
             </button>
           </div>
+
+          {error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              {error}
+            </div>
+          )}
 
           <div className="h-px bg-zinc-800 w-full mb-8" />
 

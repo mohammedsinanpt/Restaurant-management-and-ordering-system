@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-    TrendingUp, ShoppingBag, Users, Clock, 
-    ArrowUpRight, ArrowDownRight, DollarSign, 
-    Calendar, Filter, PieChart, BarChart3, Award
+import {
+    TrendingUp, ShoppingBag, Users,
+    ArrowUpRight, ArrowDownRight, DollarSign,
+    BarChart3, Award
 } from 'lucide-react';
-import { 
-    AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-    CartesianGrid, BarChart, Bar, Cell, PieChart as RePieChart, Pie
+import {
+    AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+    CartesianGrid, Cell, PieChart as RePieChart, Pie
 } from 'recharts';
+import { fetchOrders } from '../api';
 
 // --- Components ---
 
@@ -50,36 +51,44 @@ const Dashboard = () => {
 
     // --- Data Processing Engine ---
     useEffect(() => {
-        const refreshAnalytics = () => {
-            const allOrders = JSON.parse(localStorage.getItem('allOrders') || '[]');
+        const refreshAnalytics = async () => {
+            let allOrders = [];
+            try {
+                const { data } = await fetchOrders();
+                // Cancelled orders never generated revenue — exclude them from analytics
+                allOrders = data.filter(o => o.status !== 'CANCELLED');
+            } catch (e) {
+                console.error('Failed to load orders for dashboard:', e);
+                return;
+            }
+
             const now = new Date();
             const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
             // 1. Core Metrics
-            const todayOrders = allOrders.filter(o => new Date(o.timestamp).getTime() >= startOfDay);
+            const todayOrders = allOrders.filter(o => new Date(o.created_at).getTime() >= startOfDay);
             const activeSet = timeFilter === 'TODAY' ? todayOrders : allOrders;
 
-            const totalRev = allOrders.reduce((acc, o) => acc + (parseInt(o.total) || 0), 0);
-            const todayRev = todayOrders.reduce((acc, o) => acc + (parseInt(o.total) || 0), 0);
-            const activeRev = activeSet.reduce((acc, o) => acc + (parseInt(o.total) || 0), 0);
+            const totalRev = allOrders.reduce((acc, o) => acc + (parseFloat(o.total_amount) || 0), 0);
+            const todayRev = todayOrders.reduce((acc, o) => acc + (parseFloat(o.total_amount) || 0), 0);
+            const activeRev = activeSet.reduce((acc, o) => acc + (parseFloat(o.total_amount) || 0), 0);
             const activeCount = activeSet.length;
             const aov = activeCount > 0 ? Math.round(activeRev / activeCount) : 0;
 
             // 2. Top Dish Logic
             const itemMap = {};
             const categoryMap = {};
-            
+
             activeSet.forEach(order => {
                 order.items?.forEach(item => {
                     // Item Count
-                    const name = item.name || item.item_name;
+                    const name = item.item_name;
                     if (!itemMap[name]) itemMap[name] = { count: 0, revenue: 0 };
                     itemMap[name].count += (item.quantity || 1);
-                    itemMap[name].revenue += (item.price * (item.quantity || 1));
+                    itemMap[name].revenue += (parseFloat(item.price) || 0) * (item.quantity || 1);
 
-                    // Category Count (Simulated based on price or name if category missing)
-                    // In a real app, you'd use item.category
-                    const cat = item.category || (item.price > 300 ? 'Main Course' : item.price > 100 ? 'Starters' : 'Beverages');
+                    // Category Count
+                    const cat = item.category_name || 'Uncategorized';
                     categoryMap[cat] = (categoryMap[cat] || 0) + (item.quantity || 1);
                 });
             });
@@ -92,21 +101,21 @@ const Dashboard = () => {
 
             // 3. Category Data for Pie Chart
             const pieData = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
-            
+
             // 4. Hourly Sales Trend (Area Chart)
             const hours = new Array(12).fill(0).map((_, i) => {
                 const h = i + 11; // 11 AM start
-                return { 
-                    time: h > 12 ? `${h-12}PM` : `${h}AM`, 
+                return {
+                    time: h > 12 ? `${h-12}PM` : `${h}AM`,
                     fullHour: h,
-                    sales: 0 
+                    sales: 0
                 };
             });
 
             activeSet.forEach(order => {
-                const h = new Date(order.timestamp).getHours();
+                const h = new Date(order.created_at).getHours();
                 const bucket = hours.find(b => b.fullHour === h);
-                if (bucket) bucket.sales += parseInt(order.total || 0);
+                if (bucket) bucket.sales += parseFloat(order.total_amount || 0);
             });
 
             // Update State
@@ -332,27 +341,25 @@ const Dashboard = () => {
                                 recentOrders.map((order, i) => (
                                     <tr key={i} className="hover:bg-zinc-800/30 transition-colors">
                                         <td className="px-8 py-5 font-mono text-zinc-400">
-                                            #{order.id ? order.id.slice(-6).toUpperCase() : '---'}
+                                            #{order.order_id ? order.order_id.slice(-6).toUpperCase() : '---'}
                                         </td>
                                         <td className="px-8 py-5">
                                             <div className="flex flex-col">
                                                 <span className="text-white font-bold">{order.items?.length || 0} Items</span>
                                                 <span className="text-zinc-500 text-xs truncate w-48">
-                                                    {order.items?.[0]?.name || 'Unknown'} {order.items?.length > 1 && `+${order.items.length - 1} more`}
+                                                    {order.items?.[0]?.item_name || 'Unknown'} {order.items?.length > 1 && `+${order.items.length - 1} more`}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-8 py-5 text-zinc-400">
-                                            {new Date(order.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                            {new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                         </td>
                                         <td className="px-8 py-5">
                                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                                order.status === 'COMPLETED' ? 'bg-zinc-800 text-zinc-300' :
                                                 order.status === 'READY' ? 'bg-emerald-500/10 text-emerald-500' :
                                                 'bg-orange-500/10 text-orange-500'
                                             }`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${
-                                                    order.status === 'COMPLETED' ? 'bg-zinc-500' :
                                                     order.status === 'READY' ? 'bg-emerald-500' :
                                                     'bg-orange-500'
                                                 }`}></span>
@@ -360,7 +367,7 @@ const Dashboard = () => {
                                             </span>
                                         </td>
                                         <td className="px-8 py-5 text-right font-black text-white">
-                                            ₹{order.total}
+                                            ₹{order.total_amount}
                                         </td>
                                     </tr>
                                 ))

@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.sqlite3
+.env
+venv/
+env/
+staticfiles/
+
+# Node / frontend (frontend/ has its own, this covers root-level runs)
+node_modules/
+dist/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store

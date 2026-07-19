@@ -1,81 +1,80 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, ChefHat, CheckCircle, ArrowLeft, ShoppingBag, AlertCircle, ChevronRight, Utensils } from 'lucide-react';
+import { Clock, ChefHat, CheckCircle, ArrowLeft, ShoppingBag, XCircle, Utensils, LogIn } from 'lucide-react';
+import { useUser } from '../context/UserContext';
+import { fetchOrders, trackOrder } from '../api';
 
 const LiveStatusPage = () => {
   const { orderId } = useParams();
   const navigate = useNavigate();
-  
-  // State for all active orders and the currently viewed order
+  const { currentUser } = useUser();
+  const isLiveMode = !orderId || orderId === 'live';
+
+  // State for all active orders (live mode) and the currently viewed order
   const [activeOrders, setActiveOrders] = useState([]);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
 
   // 1. REAL-TIME DATA FETCHING
   useEffect(() => {
-    const fetchOrders = () => {
+    let cancelled = false;
+
+    const fetchLiveOrders = async () => {
+      if (!currentUser) {
+        if (!cancelled) {
+          setActiveOrders([]);
+          setSelectedOrder(null);
+          setLoading(false);
+        }
+        return;
+      }
       try {
-        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-
-        if (!currentUser) {
-            setActiveOrders([]);
-            setLoading(false);
-            return; 
-        }
-
-        const allOrders = JSON.parse(localStorage.getItem('allOrders') || '[]');
-        
-        // Filter orders for this user
-        const userOrders = allOrders.filter(o => 
-            o.userId === currentUser.uid || o.userEmail === currentUser.email
-        );
-
-        // Get ALL active orders (not just the first one)
-        // We also include 'COMPLETED' if it was updated in the last 5 minutes (optional polish)
-        const currentActive = userOrders.filter(o => 
-            ['PENDING', 'PREPARING', 'READY'].includes(o.status)
-        ).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
-
-        setActiveOrders(currentActive);
-
-        // DECIDE WHICH ORDER TO SHOW
-        if (currentActive.length > 0) {
-            if (orderId && orderId !== 'live') {
-                // If URL has specific ID, try to find it in active list, or fallback to history
-                const specific = userOrders.find(o => o.id === orderId);
-                setSelectedOrder(specific || currentActive[0]);
-            } else {
-                // If currently viewing an order, update it (to catch status changes)
-                // If not, default to the most recent one (index 0)
-                setSelectedOrder(prev => {
-                    if (prev) {
-                        const updatedPrev = currentActive.find(o => o.id === prev.id);
-                        return updatedPrev || currentActive[0];
-                    }
-                    return currentActive[0];
-                });
-            }
-        } else {
-            // Handle case where specific order ID exists but is completed/old
-            if (orderId && orderId !== 'live') {
-                 const specific = userOrders.find(o => o.id === orderId);
-                 setSelectedOrder(specific || null);
-            } else {
-                setSelectedOrder(null);
-            }
-        }
-
-      } catch (error) {
-        console.error("Error fetching orders:", error);
+        const { data } = await fetchOrders();
+        const active = data
+          .filter(o => ['PENDING', 'PREPARING', 'READY'].includes(o.status))
+          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        if (cancelled) return;
+        setActiveOrders(active);
+        setSelectedOrder(prev => {
+          if (prev) {
+            const stillActive = active.find(o => o.order_id === prev.order_id);
+            if (stillActive) return stillActive;
+          }
+          return active[0] || null;
+        });
+      } catch (e) {
+        console.error('Error fetching orders:', e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
-    fetchOrders();
-    const interval = setInterval(fetchOrders, 3000); // Poll every 3 seconds
-    return () => clearInterval(interval);
-  }, [orderId]);
+    const fetchSingleOrder = async () => {
+      try {
+        const { data } = await trackOrder(orderId);
+        if (cancelled) return;
+        setSelectedOrder(data);
+        setNotFound(false);
+      } catch {
+        if (cancelled) return;
+        setSelectedOrder(null);
+        setNotFound(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    setLoading(true);
+    const runFetch = isLiveMode ? fetchLiveOrders : fetchSingleOrder;
+    runFetch();
+    const interval = setInterval(runFetch, 4000); // Poll periodically
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [orderId, isLiveMode, currentUser]);
 
   // Loading State
   if (loading) return (
@@ -87,17 +86,36 @@ const LiveStatusPage = () => {
     </div>
   );
 
+  // Signed-out guest browsing "live" without a specific order to track
+  if (isLiveMode && !currentUser) return (
+      <div className="min-h-screen bg-zinc-950 text-white p-6 flex flex-col items-center justify-center text-center">
+          <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
+             <LogIn className="w-10 h-10 text-zinc-500" />
+          </div>
+          <h1 className="text-3xl font-bold mb-2">Sign In to Track Orders</h1>
+          <p className="text-zinc-400 mb-8 max-w-md">
+            Guest orders are tracked via the link on your confirmation page. Sign in to see all of your active orders here.
+          </p>
+          <button onClick={() => navigate('/auth')}
+            className="bg-orange-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-orange-500 transition-colors shadow-lg shadow-orange-600/20">
+            Sign In
+          </button>
+      </div>
+  );
+
   // No Orders Found State
   if (!selectedOrder) return (
       <div className="min-h-screen bg-zinc-950 text-white p-6 flex flex-col items-center justify-center text-center">
           <div className="w-20 h-20 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
              <ShoppingBag className="w-10 h-10 text-zinc-500" />
           </div>
-          <h1 className="text-3xl font-bold mb-2">No Active Orders</h1>
+          <h1 className="text-3xl font-bold mb-2">{notFound ? 'Order Not Found' : 'No Active Orders'}</h1>
           <p className="text-zinc-400 mb-8 max-w-md">
-            Looks like all your orders are completed or you haven't placed one yet.
+            {notFound
+              ? "We couldn't find an order with that ID. Double-check the link from your confirmation page."
+              : "Looks like all your orders are completed or you haven't placed one yet."}
           </p>
-          <button onClick={() => navigate('/menu')} 
+          <button onClick={() => navigate('/menu')}
             className="bg-orange-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-orange-500 transition-colors shadow-lg shadow-orange-600/20">
             Browse Menu
           </button>
@@ -105,19 +123,19 @@ const LiveStatusPage = () => {
   );
 
   // Helper for rendering logic
-  const status = selectedOrder.status; 
-  const steps = ['PENDING', 'PREPARING', 'READY', 'COMPLETED'];
+  const status = selectedOrder.status;
+  const steps = ['PENDING', 'PREPARING', 'READY'];
   let currentStepIdx = steps.indexOf(status);
-  if (currentStepIdx === -1) currentStepIdx = 0; 
+  if (currentStepIdx === -1) currentStepIdx = 0;
 
   const getStepColor = (stepIdx) => {
-      if (stepIdx < currentStepIdx || status === 'COMPLETED') return 'bg-green-500 text-white border-green-500'; 
+      if (stepIdx < currentStepIdx) return 'bg-green-500 text-white border-green-500';
       if (stepIdx === currentStepIdx) {
           if (status === 'PENDING') return 'bg-yellow-500 text-white border-yellow-500 animate-pulse';
           if (status === 'PREPARING') return 'bg-blue-500 text-white border-blue-500 animate-pulse';
           if (status === 'READY') return 'bg-green-600 text-white border-green-600 animate-bounce';
       }
-      return 'bg-zinc-900 text-zinc-600 border-zinc-800'; 
+      return 'bg-zinc-900 text-zinc-600 border-zinc-800';
   };
 
   const formatTime = (isoString) => {
@@ -128,12 +146,12 @@ const LiveStatusPage = () => {
   return (
     <div className="min-h-screen bg-zinc-950 text-white p-6 pb-20 font-sans">
       <div className="max-w-2xl mx-auto">
-        
+
         {/* Header Navigation */}
         <div className="flex items-center justify-between mb-6">
             <button onClick={() => navigate('/menu')} className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group">
                 <div className="p-2 bg-zinc-900 rounded-full group-hover:bg-zinc-800 transition-colors">
-                    <ArrowLeft className="w-5 h-5" /> 
+                    <ArrowLeft className="w-5 h-5" />
                 </div>
                 <span className="font-medium hidden sm:inline">Back to Menu</span>
             </button>
@@ -142,23 +160,23 @@ const LiveStatusPage = () => {
             </div>
         </div>
 
-        {/* MULTI-ORDER SWITCHER (New Feature) */}
+        {/* MULTI-ORDER SWITCHER */}
         {activeOrders.length > 1 && (
             <div className="mb-6 overflow-x-auto pb-2 custom-scrollbar">
                 <div className="flex gap-3">
                     {activeOrders.map((ord) => (
-                        <button 
-                            key={ord.id}
+                        <button
+                            key={ord.order_id}
                             onClick={() => setSelectedOrder(ord)}
                             className={`flex flex-col items-start min-w-[140px] p-3 rounded-xl border transition-all ${
-                                selectedOrder.id === ord.id 
-                                ? 'bg-zinc-800 border-orange-500 ring-1 ring-orange-500/50' 
+                                selectedOrder.order_id === ord.order_id
+                                ? 'bg-zinc-800 border-orange-500 ring-1 ring-orange-500/50'
                                 : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800'
                             }`}
                         >
                             <div className="flex justify-between w-full mb-1">
-                                <span className="text-xs font-bold text-zinc-400">#{ord.id.slice(-4)}</span>
-                                <span className="text-xs font-mono text-zinc-500">{formatTime(ord.timestamp)}</span>
+                                <span className="text-xs font-bold text-zinc-400">#{ord.order_id.slice(-4)}</span>
+                                <span className="text-xs font-mono text-zinc-500">{formatTime(ord.created_at)}</span>
                             </div>
                             <div className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                                 ord.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
@@ -173,30 +191,42 @@ const LiveStatusPage = () => {
             </div>
         )}
 
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500" key={selectedOrder.id}>
-            
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500" key={selectedOrder.order_id}>
+
+            {status === 'CANCELLED' ? (
+                /* Cancelled State */
+                <div className="bg-zinc-900 border border-red-900/40 rounded-3xl p-8 text-center shadow-2xl">
+                    <XCircle className="w-14 h-14 text-red-500 mx-auto mb-4" />
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-950 border border-zinc-700 text-xs font-bold tracking-wider text-zinc-400 mb-4 uppercase">
+                        <span>Order #{selectedOrder.order_id.slice(-6).toUpperCase()}</span>
+                    </div>
+                    <h1 className="text-3xl md:text-4xl font-black mb-3 tracking-tight text-white">Order Cancelled</h1>
+                    <p className="text-red-400 font-medium text-lg">This order was cancelled by the restaurant.</p>
+                </div>
+            ) : (
+            <>
             {/* Status Card Header */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 text-center relative overflow-hidden shadow-2xl">
                 {/* Dynamic Background Progress Line */}
                 <div className="absolute top-0 left-0 w-full h-1 bg-zinc-800" />
-                <div 
+                <div
                     className={`absolute top-0 left-0 h-1 transition-all duration-1000 ease-out ${
-                        status === 'PENDING' ? 'bg-yellow-500 w-[10%]' : 
-                        status === 'PREPARING' ? 'bg-blue-500 w-[60%]' : 
+                        status === 'PENDING' ? 'bg-yellow-500 w-[10%]' :
+                        status === 'PREPARING' ? 'bg-blue-500 w-[60%]' :
                         'bg-green-500 w-full'
-                    }`} 
+                    }`}
                 />
-                
+
                 <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-zinc-950 border border-zinc-700 text-xs font-bold tracking-wider text-zinc-400 mb-4 uppercase">
-                    <span>Order #{selectedOrder.id.slice(-6).toUpperCase()}</span>
+                    <span>Order #{selectedOrder.order_id.slice(-6).toUpperCase()}</span>
                 </div>
 
                 <h1 className="text-3xl md:text-5xl font-black mb-3 tracking-tight text-white">
                     {status === 'PENDING' && "Order Received"}
                     {status === 'PREPARING' && "Chef is Cooking"}
-                    {(status === 'READY' || status === 'COMPLETED') && "Order Ready!"}
+                    {status === 'READY' && "Order Ready!"}
                 </h1>
-                
+
                 <p className={`font-medium text-lg ${
                     status === 'PENDING' ? 'text-yellow-500' :
                     status === 'PREPARING' ? 'text-blue-500' :
@@ -204,7 +234,7 @@ const LiveStatusPage = () => {
                 }`}>
                     {status === 'PENDING' && "Restaurant is reviewing your order"}
                     {status === 'PREPARING' && "Preparing your delicious food"}
-                    {(status === 'READY' || status === 'COMPLETED') && "Please collect from the counter"}
+                    {status === 'READY' && "Please collect from the counter"}
                 </p>
             </div>
 
@@ -212,13 +242,13 @@ const LiveStatusPage = () => {
             <div className="px-2 py-4">
                 <div className="relative">
                     <div className="absolute top-1/2 left-0 w-full h-1 bg-zinc-800 -translate-y-1/2 -z-10 rounded-full" />
-                    <div 
+                    <div
                         className={`absolute top-1/2 left-0 h-1 -translate-y-1/2 -z-10 transition-all duration-1000 rounded-full ${
-                            status === 'READY' || status === 'COMPLETED' ? 'bg-green-500' : 'bg-zinc-700'
+                            status === 'READY' ? 'bg-green-500' : 'bg-zinc-700'
                         }`}
-                        style={{ width: status === 'PENDING' ? '0%' : status === 'PREPARING' ? '50%' : '100%' }} 
+                        style={{ width: status === 'PENDING' ? '0%' : status === 'PREPARING' ? '50%' : '100%' }}
                     />
-                    
+
                     <div className="flex justify-between w-full">
                         {/* Step 1 */}
                         <div className="flex flex-col items-center gap-3 bg-zinc-950 px-2">
@@ -252,7 +282,7 @@ const LiveStatusPage = () => {
                <h3 className="font-bold text-lg mb-6 text-zinc-300 flex items-center gap-2">
                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> Live Updates
                </h3>
-               
+
                <div className="space-y-0 border-l-2 border-zinc-800 ml-3 pl-8 relative">
                   {(currentStepIdx >= 2) && (
                       <div className="mb-8 relative animate-in slide-in-from-bottom-2 fade-in duration-500">
@@ -263,7 +293,7 @@ const LiveStatusPage = () => {
                          <p className="text-white font-medium">Order is ready to serve!</p>
                       </div>
                   )}
-                  
+
                   {(currentStepIdx >= 1) && (
                       <div className="mb-8 relative animate-in slide-in-from-bottom-2 fade-in duration-500">
                          <div className="absolute -left-[41px] bg-zinc-950 p-1 border border-blue-500 rounded-full">
@@ -278,11 +308,13 @@ const LiveStatusPage = () => {
                       <div className="absolute -left-[41px] bg-zinc-950 p-1 border border-yellow-500 rounded-full">
                           <div className="w-4 h-4 bg-yellow-500 rounded-full" />
                       </div>
-                      <span className="text-yellow-500 text-xs font-bold uppercase block mb-1">{formatTime(selectedOrder.timestamp)}</span>
+                      <span className="text-yellow-500 text-xs font-bold uppercase block mb-1">{formatTime(selectedOrder.created_at)}</span>
                       <p className="text-white font-medium">Order received by the kitchen.</p>
                   </div>
                </div>
             </div>
+            </>
+            )}
 
             {/* Order Items Summary */}
             <div className="bg-zinc-900 rounded-3xl p-6 border border-zinc-800 shadow-xl">
@@ -295,7 +327,7 @@ const LiveStatusPage = () => {
                         {selectedOrder.items.length} Items
                     </span>
                 </div>
-                
+
                 <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                     {selectedOrder.items.map((item, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-zinc-950/50 p-3 rounded-xl border border-zinc-800/50">
@@ -304,20 +336,20 @@ const LiveStatusPage = () => {
                                     {item.quantity}x
                                 </div>
                                 <div>
-                                    <span className="text-zinc-200 font-medium block">{item.name}</span>
-                                    {item.variety && item.variety !== 'Standard' && (
-                                        <span className="text-xs text-orange-500">{item.variety}</span>
+                                    <span className="text-zinc-200 font-medium block">{item.item_name}</span>
+                                    {item.customization && (
+                                        <span className="text-xs text-orange-500">{item.customization}</span>
                                     )}
                                 </div>
                             </div>
-                            <span className="text-zinc-400 font-mono">₹{item.price * item.quantity}</span>
+                            <span className="text-zinc-400 font-mono">₹{(item.price * item.quantity).toFixed(2)}</span>
                         </div>
                     ))}
                 </div>
 
                 <div className="mt-6 pt-4 border-t border-zinc-800 flex justify-between items-center">
                     <span className="text-zinc-500 text-sm">Total Amount</span>
-                    <span className="text-xl font-black text-orange-500">₹{selectedOrder.total}</span>
+                    <span className="text-xl font-black text-orange-500">₹{selectedOrder.total_amount}</span>
                 </div>
             </div>
         </div>

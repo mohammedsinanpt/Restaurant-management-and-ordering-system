@@ -1,80 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { fetchMenu } from '../api';
+import { fetchMenu, fetchMenuItem, submitReview } from '../api';
 import { Star, Clock, Flame, ArrowLeft, Plus, Minus, ShoppingBag, ThumbsUp, MessageSquare, Check } from 'lucide-react';
+import { useUser } from '../context/UserContext';
 
-// Full Mock Data
-const MOCK_MENU = [
-    {
-        id: 1,
-        name: "Butter Chicken Royale",
-        category_name: "Main Course",
-        price: 380,
-        description: "Tender succulent chicken chunks cooked in a rich, creamy tomato gravy with premium saffron.",
-        is_veg: false,
-        image_url: "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=800&q=80",
-        calories: 450,
-        rating: 4.8,
-        reviews_count: 124
-    },
-    {
-        id: 2,
-        name: "Paneer Tikka Masala",
-        category_name: "Main Course",
-        price: 320,
-        description: "Char-grilled paneer cubes simmered in a spicy, aromatic gravy with bell peppers.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=800&q=80",
-        calories: 380,
-        rating: 4.6,
-        reviews_count: 89
-    },
-    {
-        id: 3,
-        name: "Garlic Naan Basket",
-        category_name: "Starters",
-        price: 120,
-        description: "Assortment of soft, fluffy flatbreads topped with minced garlic and artisanal butter.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1626074353765-517a681e40be?auto=format&fit=crop&w=800&q=80",
-        calories: 220,
-        rating: 4.9,
-        reviews_count: 210
-    },
-    {
-        id: 4,
-        name: "Hyderabadi Dum Biryani",
-        category_name: "Main Course",
-        price: 450,
-        description: "Aromatic basmati rice slow-cooked with spiced chicken and exotic herbs in a sealed clay pot.",
-        is_veg: false,
-        image_url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=800&q=80",
-        calories: 600,
-        rating: 4.7,
-        reviews_count: 156
-    },
-    {
-        id: 5,
-        name: "Mango Lassi",
-        category_name: "Drinks",
-        price: 150,
-        description: "Thick, creamy yogurt blended with fresh Alphonso mango pulp and a hint of cardamom.",
-        is_veg: true,
-        image_url: "https://images.unsplash.com/photo-1543362174-8b631d8c11e4?auto=format&fit=crop&w=800&q=80",
-        calories: 180,
-        rating: 4.9,
-        reviews_count: 340
-    }
-];
-
-// Initial Mock Reviews
-const INITIAL_REVIEWS = [
-    { id: 1, user: "Arjun K.", rating: 5, date: "2 days ago", comment: "Absolutely authentic taste! The spices were perfectly balanced." },
-    { id: 2, user: "Sarah M.", rating: 4, date: "1 week ago", comment: "Delicious, but a bit spicy for my taste. Loved the naan though!" },
-    { id: 3, user: "Rahul V.", rating: 5, date: "3 weeks ago", comment: "Best biryani in town. The aroma itself makes you hungry." }
-];
+const formatReview = (r) => ({
+    id: r.id,
+    user: r.customer_name,
+    rating: r.rating,
+    date: new Date(r.created_at).toLocaleDateString(),
+    comment: r.comment,
+});
 
 const DishDetailsPage = ({ addToCart }) => {
+    const { currentUser } = useUser();
   const { id } = useParams();
   const navigate = useNavigate();
   
@@ -97,57 +36,28 @@ const DishDetailsPage = ({ addToCart }) => {
   useEffect(() => {
     const loadDishAndReviews = async () => {
       setLoading(true);
-      
-      // --- 1. Load Dish Data ---
-      const savedMenu = localStorage.getItem('menuItems');
-      let allItems = MOCK_MENU;
-      let foundDish = null;
 
-      if (savedMenu) {
-          allItems = JSON.parse(savedMenu);
-          foundDish = allItems.find(d => d.id == id);
-      }
-
-      if (!foundDish) {
-          foundDish = MOCK_MENU.find(d => d.id == id);
-          if (!foundDish) {
-              try {
-                  const { data } = await fetchMenu();
-                  if (data && data.length > 0) {
-                      foundDish = data.find(d => d.id == id);
-                      allItems = data; 
-                  }
-              } catch (e) {
-                  console.warn("Using mock data");
-              }
-          }
-      }
-      
-      if (foundDish) {
+      try {
+          const [{ data: foundDish }, { data: allItems }] = await Promise.all([
+              fetchMenuItem(id),
+              fetchMenu(),
+          ]);
           setDish(foundDish);
           setSuggested(allItems.filter(d => d.id != id).slice(0, 3));
-      } else {
+          setReviews((foundDish.reviews || []).map(formatReview).reverse());
+      } catch (e) {
+          console.error('Failed to load dish:', e);
           setDish(null);
-      }
-
-      // --- 2. Load Reviews ---
-      const storageKey = `reviews_${id}`;
-      const savedReviews = localStorage.getItem(storageKey);
-      
-      if (savedReviews) {
-          setReviews(JSON.parse(savedReviews));
-      } else {
-          setReviews(INITIAL_REVIEWS);
       }
 
       setLoading(false);
     };
-    
+
     loadDishAndReviews();
     window.scrollTo(0, 0);
   }, [id]);
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = async () => {
     if (userRating === 0) {
         alert("Please select a star rating!");
         return;
@@ -158,32 +68,30 @@ const DishDetailsPage = ({ addToCart }) => {
     }
 
     setIsSubmitting(true);
-
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     const userName = currentUser?.name || currentUser?.email?.split('@')[0] || "Guest User";
 
-    setTimeout(() => {
-        const newReview = {
-            id: Date.now(),
-            user: userName,
+    try {
+        const { data } = await submitReview({
+            menu_item: dish.id,
+            customer_name: userName,
             rating: userRating,
-            date: "Just Now",
-            comment: reviewText
-        };
+            comment: reviewText,
+        });
 
-        const updatedReviews = [newReview, ...reviews];
-        setReviews(updatedReviews);
-        localStorage.setItem(`reviews_${id}`, JSON.stringify(updatedReviews));
-
+        setReviews(prev => [formatReview(data), ...prev]);
         setUserRating(0);
         setReviewText("");
+    } catch (e) {
+        console.error('Failed to submit review:', e);
+        alert('Could not submit your review. Please try again.');
+    } finally {
         setIsSubmitting(false);
-    }, 600);
+    }
   };
 
   // --- NEW: Handle Add to Cart without navigation ---
   const handleAddToCart = () => {
-      if (dish.available !== false) {
+      if (dish.is_available !== false) {
           addToCart(dish, quantity, selectedVariety);
           
           // Show success state
@@ -236,7 +144,7 @@ const DishDetailsPage = ({ addToCart }) => {
                     <div className="flex flex-wrap items-center gap-4 text-sm text-zinc-400">
                       <span className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-md"><Clock className="w-4 h-4" /> 20-25 mins</span>
                       <span className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-md"><Flame className="w-4 h-4 text-orange-500" /> {dish.calories || 350} kcal</span>
-                      <span className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-md"><Star className="w-4 h-4 text-yellow-400 fill-yellow-400" /> {dish.rating || 4.5} ({dish.reviews_count || 100}+)</span>
+                      <span className="flex items-center gap-1 bg-zinc-800 px-2 py-1 rounded-md"><Star className="w-4 h-4 text-yellow-400 fill-yellow-400" /> {dish.average_rating ? dish.average_rating.toFixed(1) : 'New'} ({reviews.length})</span>
                     </div>
                  </div>
                  <span className="text-3xl font-black text-orange-500 whitespace-nowrap">₹{dish.price}</span>
@@ -274,10 +182,10 @@ const DishDetailsPage = ({ addToCart }) => {
                 
                 {/* MODIFIED BUTTON */}
                 <button 
-                  disabled={!dish.available && dish.available !== undefined}
+                  disabled={!dish.is_available && dish.is_available !== undefined}
                   onClick={handleAddToCart}
                   className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex items-center justify-center gap-3 group/btn ${
-                      dish.available === false 
+                      dish.is_available === false 
                       ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                       : addedSuccess 
                         ? 'bg-green-600 text-white scale-95' 
@@ -291,7 +199,7 @@ const DishDetailsPage = ({ addToCart }) => {
                   ) : (
                       <>
                         <ShoppingBag className="w-5 h-5 group-hover/btn:animate-bounce" /> 
-                        {dish.available === false ? "Currently Unavailable" : `Add to Order — ₹${dish.price * quantity}`}
+                        {dish.is_available === false ? "Currently Unavailable" : `Add to Order — ₹${dish.price * quantity}`}
                       </>
                   )}
                 </button>
