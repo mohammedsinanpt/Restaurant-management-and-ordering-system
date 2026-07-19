@@ -46,5 +46,8 @@ export const loginUser = (credentials) => api.post('/login/', credentials);
 export const registerUser = (userData) => api.post('/register/', userData);
 export const fetchProfile = () => api.get('/profile/');
 export const updateProfile = (data) => api.patch('/profile/', data);
+export const requestPasswordReset = (email) => api.post('/password-reset/', { email });
+export const confirmPasswordReset = (uid, token, password) =>
+    api.post('/password-reset/confirm/', { uid, token, password });
 
 export default api;

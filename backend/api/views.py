@@ -1,7 +1,10 @@
 from decimal import Decimal
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework import viewsets, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -14,6 +17,7 @@ from .serializers import (
     MenuItemSerializer, CategorySerializer, OrderSerializer,
     ReviewSerializer, UserSerializer,
 )
+from . import emails
 import uuid
 
 
@@ -82,6 +86,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         # 5% service charge + 18% GST, matching the breakdown shown in CartPage
         order.total_amount = (subtotal * Decimal('1.23')).quantize(Decimal('0.01'))
         order.save(update_fields=['total_amount'])
+        emails.send_order_confirmation_email(order)
 
     @action(detail=True, methods=['patch'])
     def update_status(self, request, pk=None):
@@ -92,6 +97,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response({'error': 'invalid status'}, status=status.HTTP_400_BAD_REQUEST)
         order.status = new_status
         order.save()
+        emails.send_order_status_email(order)
         return Response(OrderSerializer(order).data)
 
     @action(detail=False, methods=['get'], url_path='track/(?P<order_id>[^/.]+)')
@@ -153,3 +159,44 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip().lower()
+        try:
+            user = User.objects.get(username=email)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            emails.send_password_reset_email(user, uid, token)
+        except User.DoesNotExist:
+            pass  # Don't reveal whether an account exists for this email
+        return Response({'detail': 'If that account exists, a reset link has been sent.'})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uid = request.data.get('uid') or ''
+        token = request.data.get('token') or ''
+        new_password = request.data.get('password') or ''
+
+        try:
+            user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid)))
+        except (User.DoesNotExist, ValueError, TypeError, OverflowError):
+            return Response({'error': 'Invalid or expired reset link'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({'error': 'Invalid or expired reset link'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        return Response({'detail': 'Password updated. You can now log in.'})

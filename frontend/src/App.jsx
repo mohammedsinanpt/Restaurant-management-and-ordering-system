@@ -11,6 +11,8 @@ import DishDetailsPage from './pages/DishDetailsPage';
 import CartPage from './pages/CartPage';
 import OrderConfirmationPage from './pages/OrderConfirmationPage';
 import LiveStatusPage from './pages/LiveStatusPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 
 // Context Import
 import { UserProvider } from './context/UserContext';
@@ -103,7 +105,9 @@ function App() {
           {/* Customer Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/auth" element={<AuthPage />} />
-          
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password/:uid/:token" element={<ResetPasswordPage />} />
+
           <Route path="/menu" element={<MenuPage addToCart={addToCart} cart={cart} />} />
           <Route path="/dish/:id" element={<DishDetailsPage addToCart={addToCart} />} />
           <Route path="/profile" element={<ProfilePage />} />

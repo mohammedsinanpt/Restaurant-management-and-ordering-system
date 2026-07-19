@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 
 const extractErrorMessage = (err) => {
@@ -14,6 +14,7 @@ const extractErrorMessage = (err) => {
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -66,14 +67,23 @@ const AdminLogin = () => {
              onChange={e => setEmail(e.target.value)}
              className="w-full p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:border-orange-500 outline-none"
            />
-           <input
-             type="password"
-             placeholder="Password"
-             required
-             value={password}
-             onChange={e => setPassword(e.target.value)}
-             className="w-full p-4 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:border-orange-500 outline-none"
-           />
+           <div className="relative">
+             <input
+               type={showPassword ? 'text' : 'password'}
+               placeholder="Password"
+               required
+               value={password}
+               onChange={e => setPassword(e.target.value)}
+               className="w-full p-4 pr-12 rounded-xl bg-zinc-950 border border-zinc-800 text-white focus:border-orange-500 outline-none"
+             />
+             <button
+               type="button"
+               onClick={() => setShowPassword(!showPassword)}
+               className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors focus:outline-none p-1"
+             >
+               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+             </button>
+           </div>
            <button
              disabled={loading}
              className="w-full bg-orange-600 text-white font-bold py-4 rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"

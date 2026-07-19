@@ -21,6 +21,11 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get(
     'localhost,127.0.0.1,restaurant-backend-qi8z.onrender.com'
 ).split(',') if h.strip()]
 
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://restaurant-management-and-ordering.vercel.app')
+
 
 # Application definition
 

@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     MenuItemViewSet, OrderViewSet, ReviewViewSet, CategoryViewSet,
     RegisterView, LoginView, ProfileView,
+    PasswordResetRequestView, PasswordResetConfirmView,
 )
 
 router = DefaultRouter()
@@ -16,4 +17,6 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='api_token_auth'),
     path('register/', RegisterView.as_view(), name='api_register'),
     path('profile/', ProfileView.as_view(), name='api_profile'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='api_password_reset'),
+    path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='api_password_reset_confirm'),
 ]
