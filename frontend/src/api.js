@@ -42,6 +42,9 @@ export const fetchCategories = () => api.get('/categories/');
 // Reviews
 export const submitReview = (review) => api.post('/reviews/', review);
 
+// Payments
+export const createPaymentIntent = (items) => api.post('/create-payment-intent/', { items });
+
 // Orders
 export const createOrder = (orderData) => api.post('/orders/', orderData);
 export const fetchOrders = () => api.get('/orders/');

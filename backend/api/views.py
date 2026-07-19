@@ -10,12 +10,14 @@ from rest_framework import viewsets, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import cloudinary
 import cloudinary.uploader
+import stripe
 from .models import MenuItem, Category, Order, Review, UserProfile
 from .serializers import (
     MenuItemSerializer, CategorySerializer, OrderSerializer,
@@ -23,6 +25,13 @@ from .serializers import (
 )
 from . import emails
 import uuid
+
+
+# 5% service charge + 18% GST, applied everywhere an order total is computed
+# (here, and again once items are saved in OrderViewSet.perform_create) so the
+# PaymentIntent amount and the stored order total can never drift apart.
+def _apply_charges(subtotal):
+    return (subtotal * Decimal('1.23')).quantize(Decimal('0.01'))
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -74,22 +83,42 @@ class OrderViewSet(viewsets.ModelViewSet):
         else:
             return Order.objects.none()
 
-    # SAVE: attach user, generate order_id, and compute the trusted total server-side.
+    # SAVE: an order only ever gets created once payment is verified. We never trust the
+    # client's word that a payment "succeeded" - the PaymentIntent is re-fetched from
+    # Stripe's API and checked for status + amount before anything is written to the DB.
     # order_id/total_amount are read_only on the serializer (clients can't set them via
     # input data), so they're injected here as save() kwargs, which DRF applies regardless.
     def perform_create(self, serializer):
+        payment_intent_id = self.request.data.get('payment_intent_id')
+        if not payment_intent_id:
+            raise ValidationError({'error': 'Payment is required to place an order.'})
+        if Order.objects.filter(stripe_payment_intent_id=payment_intent_id).exists():
+            raise ValidationError({'error': 'This payment has already been used for another order.'})
+
+        subtotal = sum(
+            item['menu_item'].price * item['quantity']
+            for item in serializer.validated_data['items']
+        )
+        total = _apply_charges(subtotal)
+
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        try:
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        except stripe.error.StripeError as e:
+            raise ValidationError({'error': f'Could not verify payment: {e}'})
+
+        if intent.status != 'succeeded':
+            raise ValidationError({'error': 'Payment has not been completed.'})
+        if intent.amount != int(total * 100):
+            raise ValidationError({'error': 'Payment amount does not match the order total.'})
+
         user = self.request.user
         order = serializer.save(
             user=user if user.is_authenticated else None,
             order_id=f"ORD-{uuid.uuid4().hex[:6].upper()}",
-            total_amount=0,
+            total_amount=total,
+            stripe_payment_intent_id=payment_intent_id,
         )
-        subtotal = sum(
-            item.menu_item.price * item.quantity for item in order.items.all()
-        )
-        # 5% service charge + 18% GST, matching the breakdown shown in CartPage
-        order.total_amount = (subtotal * Decimal('1.23')).quantize(Decimal('0.01'))
-        order.save(update_fields=['total_amount'])
         emails.send_order_confirmation_email(order)
 
     @action(detail=True, methods=['patch'])
@@ -163,6 +192,40 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class CreatePaymentIntentView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        items_data = request.data.get('items') or []
+        if not items_data:
+            return Response({'error': 'No items provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+        subtotal = Decimal('0')
+        for item in items_data:
+            try:
+                menu_item = MenuItem.objects.get(pk=item.get('menu_item'))
+            except (MenuItem.DoesNotExist, ValueError, TypeError):
+                return Response({'error': 'One or more menu items were not found'}, status=status.HTTP_400_BAD_REQUEST)
+            subtotal += menu_item.price * int(item.get('quantity', 1))
+
+        total = _apply_charges(subtotal)
+
+        stripe.api_key = settings.STRIPE_SECRET_KEY
+        if not stripe.api_key:
+            return Response({'error': 'Payments are not configured on this server'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        try:
+            intent = stripe.PaymentIntent.create(
+                amount=int(total * 100),
+                currency='inr',
+                automatic_payment_methods={'enabled': True},
+            )
+        except stripe.error.StripeError as e:
+            return Response({'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({'client_secret': intent.client_secret, 'amount': str(total)})
 
 
 class MenuImageUploadView(APIView):

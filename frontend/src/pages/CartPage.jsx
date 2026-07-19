@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Trash2, Plus, Minus, ArrowRight, UserCircle, Lock, Loader2, ShoppingBag, AlertCircle, Hash } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowRight, UserCircle, Lock, Loader2, ShoppingBag, AlertCircle, Hash, CreditCard } from 'lucide-react';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useUser } from '../context/UserContext'; // <--- 1. Import Context
-import { createOrder } from '../api';
+import { createOrder, createPaymentIntent } from '../api';
+import { stripePromise } from '../stripe';
 
 const extractErrorMessage = (err) => {
     const data = err?.response?.data;
@@ -12,12 +14,95 @@ const extractErrorMessage = (err) => {
     return 'Something went wrong placing your order.';
 };
 
+// Renders inside the Stripe <Elements> provider once a PaymentIntent exists.
+// Confirms the card payment, then only creates the order once Stripe confirms it succeeded.
+const CheckoutForm = ({ total, orderPayload, onSuccess, onCancel }) => {
+    const stripe = useStripe();
+    const elements = useElements();
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handlePay = async (e) => {
+        e.preventDefault();
+        if (!stripe || !elements) return;
+
+        setSubmitting(true);
+        setError('');
+
+        const { error: stripeError, paymentIntent } = await stripe.confirmPayment({
+            elements,
+            redirect: 'if_required',
+        });
+
+        if (stripeError) {
+            setError(stripeError.message || 'Payment failed. Please check your card details.');
+            setSubmitting(false);
+            return;
+        }
+
+        if (paymentIntent?.status !== 'succeeded') {
+            setError('Payment was not completed. Please try again.');
+            setSubmitting(false);
+            return;
+        }
+
+        try {
+            const { data } = await createOrder({ ...orderPayload, payment_intent_id: paymentIntent.id });
+            onSuccess(data);
+        } catch (err) {
+            console.error('Order creation failed after payment succeeded:', err);
+            setError(
+                `Payment succeeded, but we couldn't finalize your order. ` +
+                `Reference: ${paymentIntent.id} — please contact us with this reference.`
+            );
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <form onSubmit={handlePay} className="space-y-4">
+            <PaymentElement />
+
+            {error && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-500 text-sm">
+                    <AlertCircle className="w-5 h-5 shrink-0" />
+                    {error}
+                </div>
+            )}
+
+            <div className="flex gap-3">
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={submitting}
+                    className="px-6 py-4 rounded-xl font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-all disabled:opacity-50"
+                >
+                    Back
+                </button>
+                <button
+                    type="submit"
+                    disabled={!stripe || submitting}
+                    className="flex-1 py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex justify-center items-center gap-2 bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20 disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {submitting ? (
+                        <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</>
+                    ) : (
+                        <><CreditCard className="w-5 h-5" /> Pay ₹{total.toFixed(2)}</>
+                    )}
+                </button>
+            </div>
+        </form>
+    );
+};
+
 const CartPage = ({ cart, updateQuantity, clearCart }) => {
     const navigate = useNavigate();
     const { currentUser } = useUser(); // <--- 2. Get User from Context
     const [loading, setLoading] = useState(false);
     const [tableNumber, setTableNumber] = useState('');
     const [error, setError] = useState('');
+    const [clientSecret, setClientSecret] = useState('');
+    const [orderPayload, setOrderPayload] = useState(null);
 
     // Calculations
     const subtotal = cart.reduce((acc, item) => acc + (parseFloat(item.price) * item.quantity), 0);
@@ -25,7 +110,7 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
     const tax = subtotal * 0.18; // 18% GST
     const total = subtotal + serviceCharge + tax;
 
-    const handlePlaceOrder = async () => {
+    const handleProceedToPayment = async () => {
         setError('');
 
         const table = parseInt(tableNumber, 10);
@@ -36,29 +121,27 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
 
         setLoading(true);
         try {
-            const orderPayload = {
-                table_number: table,
-                items: cart.map(item => ({
-                    menu_item: item.id,
-                    quantity: item.quantity,
-                    customization: item.customization || '',
-                })),
-            };
+            const items = cart.map(item => ({
+                menu_item: item.id,
+                quantity: item.quantity,
+                customization: item.customization || '',
+            }));
 
-            const { data } = await createOrder(orderPayload);
+            const { data } = await createPaymentIntent(items);
 
-            // Clear cart
-            clearCart();
-
-            // --- REDIRECT TO CONFIRMATION PAGE ---
-            navigate(`/order-confirmation/${data.order_id}`);
-
+            setOrderPayload({ table_number: table, items });
+            setClientSecret(data.client_secret);
         } catch (err) {
-            console.error("Order Failed:", err);
+            console.error('Could not start payment:', err);
             setError(extractErrorMessage(err));
         } finally {
             setLoading(false);
         }
+    };
+
+    const handlePaymentSuccess = (order) => {
+        clearCart();
+        navigate(`/order-confirmation/${order.order_id}`);
     };
 
     // EMPTY CART VIEW
@@ -80,25 +163,25 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-6 pb-32">
-            
+
             {/* User Status Banner */}
             <div className="flex justify-between items-end mb-8">
                 <div>
                     <h1 className="text-3xl font-bold">Your Order</h1>
                     {currentUser ? (
                         <p className="text-emerald-400 flex items-center gap-2 text-sm mt-2 bg-emerald-400/10 px-3 py-1.5 rounded-lg w-fit border border-emerald-400/20">
-                            <UserCircle className="w-4 h-4" /> 
+                            <UserCircle className="w-4 h-4" />
                             Ordering as <span className="font-bold">{currentUser.name}</span>
                         </p>
                     ) : (
                         <p className="text-zinc-500 flex items-center gap-2 text-sm mt-2 bg-zinc-900 px-3 py-1.5 rounded-lg w-fit border border-zinc-800">
-                            <Lock className="w-4 h-4" /> 
+                            <Lock className="w-4 h-4" />
                             You are currently a Guest
                         </p>
                     )}
                 </div>
             </div>
-            
+
             <div className="grid lg:grid-cols-3 gap-12">
                 {/* Items List */}
                 <div className="lg:col-span-2 space-y-6">
@@ -136,12 +219,13 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                                         ₹{item.price * item.quantity}
                                     </span>
                                 </div>
-                                
+
                                 <div className="flex justify-between items-center mt-4">
                                     <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800">
                                         <button
                                             onClick={() => updateQuantity(item.id, -1, item.customization)}
-                                            className="p-2 hover:text-orange-500 transition-colors"
+                                            disabled={!!clientSecret}
+                                            className="p-2 hover:text-orange-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             <Minus className="w-4 h-4" />
                                         </button>
@@ -150,14 +234,16 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                                         </span>
                                         <button
                                             onClick={() => updateQuantity(item.id, 1, item.customization)}
-                                            className="p-2 hover:text-orange-500 transition-colors"
+                                            disabled={!!clientSecret}
+                                            className="p-2 hover:text-orange-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
                                             <Plus className="w-4 h-4" />
                                         </button>
                                     </div>
                                     <button
                                         onClick={() => updateQuantity(item.id, -100, item.customization)}
-                                        className="text-zinc-600 hover:text-red-500 p-2 transition-colors"
+                                        disabled={!!clientSecret}
+                                        className="text-zinc-600 hover:text-red-500 p-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         <Trash2 className="w-5 h-5" />
                                     </button>
@@ -181,8 +267,9 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                                 min="1"
                                 value={tableNumber}
                                 onChange={(e) => setTableNumber(e.target.value)}
+                                disabled={!!clientSecret}
                                 placeholder="e.g. 4"
-                                className="w-full pl-11 pr-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white outline-none focus:border-orange-500/50 transition-all"
+                                className="w-full pl-11 pr-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800 text-white outline-none focus:border-orange-500/50 transition-all disabled:opacity-60"
                             />
                         </div>
                     </div>
@@ -213,29 +300,42 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                         </div>
                     )}
 
-                    {/* The Checkout Button */}
-                    <button
-                        onClick={handlePlaceOrder}
-                        disabled={loading}
-                        className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex justify-between px-6 items-center group bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                    >
-                        {loading ? (
-                            <div className="flex items-center gap-2 mx-auto">
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                <span>Processing...</span>
-                            </div>
-                        ) : (
-                            <>
-                                <span>Confirm Order</span>
-                                <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
-                            </>
-                        )}
-                    </button>
+                    {clientSecret ? (
+                        <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'night', variables: { colorPrimary: '#ea580c' } } }}>
+                            <CheckoutForm
+                                total={total}
+                                orderPayload={orderPayload}
+                                onSuccess={handlePaymentSuccess}
+                                onCancel={() => { setClientSecret(''); setOrderPayload(null); }}
+                            />
+                        </Elements>
+                    ) : (
+                        <>
+                            {/* The Checkout Button */}
+                            <button
+                                onClick={handleProceedToPayment}
+                                disabled={loading}
+                                className={`w-full py-4 rounded-xl font-bold text-lg transition-all shadow-xl flex justify-between px-6 items-center group bg-orange-600 text-white hover:bg-orange-500 shadow-orange-600/20 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                                {loading ? (
+                                    <div className="flex items-center gap-2 mx-auto">
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        <span>Preparing checkout...</span>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <span>Proceed to Payment</span>
+                                        <ArrowRight className="w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                                    </>
+                                )}
+                            </button>
 
-                    {!currentUser && (
-                        <p className="text-center text-xs text-zinc-500 mt-4">
-                            Ordering as a guest — <button onClick={() => navigate('/auth')} className="underline hover:text-orange-500">sign in</button> to save your order history.
-                        </p>
+                            {!currentUser && (
+                                <p className="text-center text-xs text-zinc-500 mt-4">
+                                    Ordering as a guest — <button onClick={() => navigate('/auth')} className="underline hover:text-orange-500">sign in</button> to save your order history.
+                                </p>
+                            )}
+                        </>
                     )}
                 </div>
             </div>
