@@ -60,4 +60,10 @@ export const requestPasswordReset = (email) => api.post('/password-reset/', { em
 export const confirmPasswordReset = (uid, token, password) =>
     api.post('/password-reset/confirm/', { uid, token, password });
 
+// Staff (owner-only)
+export const fetchStaff = () => api.get('/staff/');
+export const createStaff = (data) => api.post('/staff/', data);
+export const promoteStaff = (email) => api.post('/staff/promote/', { email });
+export const updateStaff = (id, data) => api.patch(`/staff/${id}/`, data);
+
 export default api;

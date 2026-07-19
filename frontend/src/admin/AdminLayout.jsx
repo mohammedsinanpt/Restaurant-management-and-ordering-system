@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Menu, ShoppingBag, Utensils, LogOut } from 'lucide-react';
+import { LayoutDashboard, Menu, ShoppingBag, Utensils, Users, LogOut } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 
 const AdminLayout = () => {
@@ -56,6 +56,10 @@ const AdminLayout = () => {
                     <NavItem to="/admin/menu" icon={Menu} label="Menu Management" />
                     <NavItem to="/admin/orders" icon={ShoppingBag} label="Orders" />
                     <NavItem to="/admin/kitchen" icon={Utensils} label="Kitchen View" />
+                    {/* Staff management is owner-only; the API enforces this too */}
+                    {currentUser.is_superuser && (
+                        <NavItem to="/admin/staff" icon={Users} label="Staff" />
+                    )}
                 </nav>
 
                 <button onClick={handleLogout} className="flex items-center gap-2 text-zinc-500 hover:text-red-500 mt-auto px-4 py-2">

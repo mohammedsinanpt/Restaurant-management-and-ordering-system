@@ -14,7 +14,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, BasePermission
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import cloudinary
@@ -316,3 +316,104 @@ class PasswordResetConfirmView(APIView):
         user.set_password(new_password)
         user.save()
         return Response({'detail': 'Password updated. You can now log in.'})
+
+
+class IsSuperUser(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_superuser)
+
+
+def _as_bool(value):
+    # Form-encoded clients send "false" as a string, and bool("false") is True - which
+    # would silently turn a revoke into a no-op. Parse the text form explicitly.
+    if isinstance(value, str):
+        return value.strip().lower() not in ('false', '0', '', 'none')
+    return bool(value)
+
+
+def _serialized_staff(user):
+    return {
+        'id': user.id,
+        'email': user.username,
+        'name': user.first_name,
+        'is_active': user.is_active,
+        'is_superuser': user.is_superuser,
+        'date_joined': user.date_joined,
+        'last_login': user.last_login,
+    }
+
+
+class StaffViewSet(viewsets.ViewSet):
+    # Owners only, not all staff: a kitchen account must not be able to mint new admins
+    # or lock the owner out of their own restaurant.
+    permission_classes = [IsSuperUser]
+
+    def list(self, request):
+        staff = User.objects.filter(is_staff=True).order_by('-is_superuser', 'username')
+        return Response([_serialized_staff(u) for u in staff])
+
+    def create(self, request):
+        # username is the login identifier everywhere in this app (see RegisterView),
+        # so a staff account is just a user whose username happens to be their email.
+        email = (request.data.get('email') or '').strip().lower()
+        password = request.data.get('password') or ''
+        name = (request.data.get('name') or '').strip()
+
+        if not email or not password:
+            return Response({'error': 'email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        existing = User.objects.filter(username=email).first()
+        if existing:
+            # Tell the client this is recoverable by promoting rather than a dead end.
+            return Response({
+                'error': 'An account with that email already exists.',
+                'can_promote': not existing.is_staff,
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(password)
+        except DjangoValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.create_user(
+            username=email, email=email, password=password, first_name=name, is_staff=True,
+        )
+        return Response(_serialized_staff(user), status=status.HTTP_201_CREATED)
+
+    def partial_update(self, request, pk=None):
+        try:
+            user = User.objects.get(pk=pk, is_staff=True)
+        except User.DoesNotExist:
+            return Response({'error': 'Staff member not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Two lockout guards: you can't strip your own access, and owner accounts are
+        # only editable from the Django admin. Together these make it impossible to end
+        # up with zero usable owners through this API.
+        if user.pk == request.user.pk:
+            return Response({'error': 'You cannot change your own access.'}, status=status.HTTP_400_BAD_REQUEST)
+        if user.is_superuser:
+            return Response({'error': 'Owner accounts can only be changed from the Django admin.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if 'is_active' in request.data:
+            user.is_active = _as_bool(request.data['is_active'])
+        if 'is_staff' in request.data:
+            user.is_staff = _as_bool(request.data['is_staff'])
+        user.save()
+
+        # DRF tokens never expire on their own, so revoking access has to delete the
+        # token too - otherwise a disabled account keeps working until they log out.
+        if not user.is_active or not user.is_staff:
+            Token.objects.filter(user=user).delete()
+
+        return Response(_serialized_staff(user))
+
+    @action(detail=False, methods=['post'])
+    def promote(self, request):
+        email = (request.data.get('email') or '').strip().lower()
+        try:
+            user = User.objects.get(username=email)
+        except User.DoesNotExist:
+            return Response({'error': 'No account exists with that email'}, status=status.HTTP_404_NOT_FOUND)
+        user.is_staff = True
+        user.save()
+        return Response(_serialized_staff(user))

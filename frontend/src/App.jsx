@@ -25,6 +25,7 @@ import AdminDashboard from './admin/Dashboard';
 import MenuManagement from './admin/MenuManagement';
 import OrderManagement from './admin/OrderManagement';
 import KitchenView from './admin/KitchenView';
+import StaffManagement from './admin/StaffManagement';
 
 function App() {
   // --- 1. PROFESSIONAL SMOOTH SCROLL SETUP ---
@@ -147,6 +148,7 @@ function App() {
              <Route path="menu" element={<MenuManagement />} />
              <Route path="orders" element={<OrderManagement />} />
              <Route path="kitchen" element={<KitchenView />} />
+             <Route path="staff" element={<StaffManagement />} />
           </Route>
         </Routes>
         <ToastContainer toasts={toasts} onDismiss={removeToast} />

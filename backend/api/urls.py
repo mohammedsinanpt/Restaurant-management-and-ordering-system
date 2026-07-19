@@ -4,7 +4,7 @@ from .views import (
     MenuItemViewSet, OrderViewSet, ReviewViewSet, CategoryViewSet,
     RegisterView, LoginView, ProfileView,
     PasswordResetRequestView, PasswordResetConfirmView,
-    MenuImageUploadView, CreatePaymentIntentView,
+    MenuImageUploadView, CreatePaymentIntentView, StaffViewSet,
 )
 
 router = DefaultRouter()
@@ -12,6 +12,7 @@ router.register(r'menu-items', MenuItemViewSet)
 router.register(r'reviews', ReviewViewSet)
 router.register(r'orders', OrderViewSet, basename='order')
 router.register(r'categories', CategoryViewSet)
+router.register(r'staff', StaffViewSet, basename='staff')
 
 urlpatterns = [
     path('', include(router.urls)),
