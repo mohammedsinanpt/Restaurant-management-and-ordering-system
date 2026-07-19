@@ -1,19 +1,33 @@
+import logging
+
 import resend
 from django.conf import settings
 
 FROM_ADDRESS = "SpiceRoute <onboarding@resend.dev>"
+
+logger = logging.getLogger(__name__)
 
 
 def _send(to, subject, html):
     if not settings.RESEND_API_KEY:
         return
     resend.api_key = settings.RESEND_API_KEY
-    resend.Emails.send({
-        "from": FROM_ADDRESS,
-        "to": [to],
-        "subject": subject,
-        "html": html,
-    })
+    try:
+        resend.Emails.send({
+            "from": FROM_ADDRESS,
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        })
+    except Exception:
+        # Email is a side effect of a successful operation (an order was placed, a
+        # password reset was requested), never the reason it should fail. Resend
+        # raises on any API error (bad key, rate limit, rejected recipient), and
+        # letting that bubble up would 500 a request that otherwise succeeded - and
+        # for password reset specifically, would leak whether an account exists
+        # (existing users get a 500 from a failed send, non-existent users always
+        # get a clean 200), which defeats the whole point of that endpoint.
+        logger.exception("Failed to send email %r to %s", subject, to)
 
 
 def send_password_reset_email(user, uid, token):

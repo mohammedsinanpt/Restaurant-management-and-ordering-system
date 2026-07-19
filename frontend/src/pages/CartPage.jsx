@@ -113,6 +113,11 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
     const handleProceedToPayment = async () => {
         setError('');
 
+        if (!currentUser) {
+            navigate('/auth', { state: { from: '/cart' } });
+            return;
+        }
+
         const table = parseInt(tableNumber, 10);
         if (!table || table <= 0) {
             setError('Please enter a valid table number.');
@@ -322,6 +327,11 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
                                         <Loader2 className="w-5 h-5 animate-spin" />
                                         <span>Preparing checkout...</span>
                                     </div>
+                                ) : !currentUser ? (
+                                    <>
+                                        <span>Sign In to Checkout</span>
+                                        <Lock className="w-5 h-5" />
+                                    </>
                                 ) : (
                                     <>
                                         <span>Proceed to Payment</span>
@@ -332,7 +342,7 @@ const CartPage = ({ cart, updateQuantity, clearCart }) => {
 
                             {!currentUser && (
                                 <p className="text-center text-xs text-zinc-500 mt-4">
-                                    Ordering as a guest — <button onClick={() => navigate('/auth')} className="underline hover:text-orange-500">sign in</button> to save your order history.
+                                    You'll need to sign in before placing your order — your cart will be waiting.
                                 </p>
                             )}
                         </>

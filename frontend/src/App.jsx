@@ -13,6 +13,7 @@ import OrderConfirmationPage from './pages/OrderConfirmationPage';
 import LiveStatusPage from './pages/LiveStatusPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import { ToastContainer } from './components/Toast';
 
 // Context Import
 import { UserProvider } from './context/UserContext';
@@ -67,19 +68,32 @@ function App() {
     localStorage.setItem('shoppingCart', JSON.stringify(cart));
   }, [cart]);
 
+  // Toast Notifications
+  const [toasts, setToasts] = useState([]);
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
+
+  const showToast = (item, qty) => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts(prev => [...prev.slice(-2), { id, name: item.name, image: item.image_url, qty }]);
+  };
+
   // Add to Cart Logic
   const addToCart = (item, qty = 1, customization = '') => {
     setCart(prev => {
       const existing = prev.find(i => i.id === item.id && i.customization === customization);
       if (existing) {
-        return prev.map(i => 
-          i.id === item.id && i.customization === customization 
-            ? { ...i, quantity: i.quantity + qty } 
+        return prev.map(i =>
+          i.id === item.id && i.customization === customization
+            ? { ...i, quantity: i.quantity + qty }
             : i
         );
       }
       return [...prev, { ...item, quantity: qty, customization }];
     });
+    showToast(item, qty);
   };
 
   // Update Quantity Logic
@@ -135,6 +149,7 @@ function App() {
              <Route path="kitchen" element={<KitchenView />} />
           </Route>
         </Routes>
+        <ToastContainer toasts={toasts} onDismiss={removeToast} />
       </Router>
     </UserProvider>
   );

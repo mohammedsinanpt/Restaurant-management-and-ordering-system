@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { useUser } from '../context/UserContext'; // Import the hook
 
@@ -14,7 +14,9 @@ const extractErrorMessage = (err) => {
 
 const AuthPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, register } = useUser(); // Get auth functions from Context
+  const redirectTo = location.state?.from || '/menu';
 
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -47,7 +49,7 @@ const AuthPage = () => {
           password: formData.password,
         });
       }
-      navigate('/menu');
+      navigate(redirectTo);
     } catch (err) {
       console.error(err);
       setError(extractErrorMessage(err));
@@ -66,7 +68,9 @@ const AuthPage = () => {
             {isLogin ? 'Welcome Back' : 'Create Account'}
           </h1>
           <p className="text-zinc-400">
-            {isLogin ? 'Enter your credentials to sign in' : 'Join us for delicious food'}
+            {location.state?.from === '/cart'
+              ? 'Sign in to complete your order'
+              : isLogin ? 'Enter your credentials to sign in' : 'Join us for delicious food'}
           </p>
         </div>
 

@@ -1,8 +1,10 @@
+import logging
 from decimal import Decimal
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.conf import settings
@@ -25,6 +27,8 @@ from .serializers import (
 )
 from . import emails
 import uuid
+
+logger = logging.getLogger(__name__)
 
 
 # 5% service charge + 18% GST, applied everywhere an order total is computed
@@ -64,11 +68,11 @@ class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.action in ['create', 'track']:
-            return [AllowAny()]  # Guests can order and track, but won't get order history
+        if self.action == 'track':
+            return [AllowAny()]  # Anyone with an order_id can check its status
         if self.action in ['update_status', 'destroy']:
             return [IsAdminUser()]
-        return [IsAuthenticated()]
+        return [IsAuthenticated()]  # Placing an order requires an account
 
     # 1. FILTER: Isolate User Data
     def get_queryset(self):
@@ -110,15 +114,35 @@ class OrderViewSet(viewsets.ModelViewSet):
         if intent.status != 'succeeded':
             raise ValidationError({'error': 'Payment has not been completed.'})
         if intent.amount != int(total * 100):
-            raise ValidationError({'error': 'Payment amount does not match the order total.'})
+            # The customer has already been charged the amount that was quoted when they
+            # started checkout. If it no longer matches (e.g. an admin edited a menu price
+            # while they were paying), we must not silently keep their money with nothing
+            # to show for it - refund the payment before rejecting the order.
+            try:
+                stripe.Refund.create(payment_intent=payment_intent_id)
+                refund_note = ' Your payment has been automatically refunded.'
+            except stripe.error.StripeError:
+                logger.exception('Failed to auto-refund mismatched payment %s', payment_intent_id)
+                refund_note = (
+                    f' Please contact us with this reference so we can refund you: {payment_intent_id}'
+                )
+            raise ValidationError({
+                'error': 'The order total changed before payment was confirmed.' + refund_note
+            })
 
-        user = self.request.user
-        order = serializer.save(
-            user=user if user.is_authenticated else None,
-            order_id=f"ORD-{uuid.uuid4().hex[:6].upper()}",
-            total_amount=total,
-            stripe_payment_intent_id=payment_intent_id,
-        )
+        try:
+            order = serializer.save(
+                user=self.request.user,
+                order_id=f"ORD-{uuid.uuid4().hex[:6].upper()}",
+                total_amount=total,
+                stripe_payment_intent_id=payment_intent_id,
+            )
+        except IntegrityError:
+            # Two concurrent requests for the same payment_intent_id both passed the
+            # exists() check above before either committed; the unique constraint on
+            # stripe_payment_intent_id is the real guard against a duplicate order, this
+            # just turns the loser's raw IntegrityError into a clean, expected message.
+            raise ValidationError({'error': 'This payment has already been used for another order.'})
         emails.send_order_confirmation_email(order)
 
     @action(detail=True, methods=['patch'])
@@ -195,7 +219,7 @@ class ProfileView(APIView):
 
 
 class CreatePaymentIntentView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         items_data = request.data.get('items') or []
