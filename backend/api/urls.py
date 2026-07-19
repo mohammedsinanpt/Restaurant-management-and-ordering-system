@@ -4,6 +4,7 @@ from .views import (
     MenuItemViewSet, OrderViewSet, ReviewViewSet, CategoryViewSet,
     RegisterView, LoginView, ProfileView,
     PasswordResetRequestView, PasswordResetConfirmView,
+    MenuImageUploadView,
 )
 
 router = DefaultRouter()
@@ -19,4 +20,5 @@ urlpatterns = [
     path('profile/', ProfileView.as_view(), name='api_profile'),
     path('password-reset/', PasswordResetRequestView.as_view(), name='api_password_reset'),
     path('password-reset/confirm/', PasswordResetConfirmView.as_view(), name='api_password_reset_confirm'),
+    path('upload-image/', MenuImageUploadView.as_view(), name='api_upload_image'),
 ]

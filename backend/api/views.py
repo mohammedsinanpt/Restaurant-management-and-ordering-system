@@ -5,13 +5,17 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+import cloudinary
+import cloudinary.uploader
 from .models import MenuItem, Category, Order, Review, UserProfile
 from .serializers import (
     MenuItemSerializer, CategorySerializer, OrderSerializer,
@@ -159,6 +163,31 @@ class ProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class MenuImageUploadView(APIView):
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        image = request.FILES.get('image')
+        if not image:
+            return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+        if not settings.CLOUDINARY_CLOUD_NAME:
+            return Response({'error': 'Image uploads are not configured on this server'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
+            secure=True,
+        )
+        try:
+            result = cloudinary.uploader.upload(image, folder='spiceroute/menu')
+        except Exception as e:
+            return Response({'error': f'Upload failed: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
+
+        return Response({'url': result['secure_url']}, status=status.HTTP_201_CREATED)
 
 
 class PasswordResetRequestView(APIView):

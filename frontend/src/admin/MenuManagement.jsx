@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash, Image as ImageIcon, X, Save, Search, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { fetchMenu, fetchCategories, createMenuItem, updateMenuItem, deleteMenuItem } from '../api';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Edit2, Trash, Image as ImageIcon, X, Save, Search, CheckCircle, AlertCircle, Loader2, Upload } from 'lucide-react';
+import { fetchMenu, fetchCategories, createMenuItem, updateMenuItem, deleteMenuItem, uploadMenuImage } from '../api';
 
 const emptyForm = {
   name: '',
@@ -29,6 +29,8 @@ const MenuManagement = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [imageUploading, setImageUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -102,6 +104,23 @@ const MenuManagement = () => {
     } catch (e) {
       console.error('Failed to update availability:', e);
       setItems(previous);
+    }
+  };
+
+  const handleImageFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFormError('');
+    setImageUploading(true);
+    try {
+      const { data } = await uploadMenuImage(file);
+      setFormData(prev => ({ ...prev, image_url: data.url }));
+    } catch (err) {
+      console.error('Image upload failed:', err);
+      setFormError(extractErrorMessage(err));
+    } finally {
+      setImageUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -367,11 +386,40 @@ const MenuManagement = () => {
                     )}
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-zinc-400 uppercase tracking-wider">Image URL</label>
+                        <label className="text-sm font-bold text-zinc-400 uppercase tracking-wider">Dish Image</label>
+                        <div className="flex items-center gap-4">
+                            <div className="w-20 h-20 rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden shrink-0 flex items-center justify-center">
+                                {imageUploading ? (
+                                    <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+                                ) : formData.image_url ? (
+                                    <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                                ) : (
+                                    <ImageIcon className="w-6 h-6 text-zinc-600" />
+                                )}
+                            </div>
+                            <div className="flex-1 space-y-2">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleImageFileChange}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={imageUploading}
+                                    className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {imageUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                                    {imageUploading ? 'Uploading...' : 'Upload Image'}
+                                </button>
+                            </div>
+                        </div>
                         <input
                             type="url"
-                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-white focus:border-orange-500 outline-none"
-                            placeholder="https://..."
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-sm text-zinc-400 focus:border-orange-500 outline-none"
+                            placeholder="or paste an image URL directly"
                             value={formData.image_url}
                             onChange={e => setFormData({...formData, image_url: e.target.value})}
                         />

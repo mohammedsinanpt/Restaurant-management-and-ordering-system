@@ -28,6 +28,13 @@ export const fetchMenuItem = (id) => api.get(`/menu-items/${id}/`);
 export const createMenuItem = (item) => api.post('/menu-items/', item);
 export const updateMenuItem = (id, item) => api.patch(`/menu-items/${id}/`, item);
 export const deleteMenuItem = (id) => api.delete(`/menu-items/${id}/`);
+export const uploadMenuImage = (file) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    return api.post('/upload-image/', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    });
+};
 
 // Categories
 export const fetchCategories = () => api.get('/categories/');
